@@ -1,0 +1,26 @@
+# Core deep learning
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Numerical and scientific computing
+numpy>=1.23.0
+scipy>=1.9.0
+
+# Data handling
+h5py>=3.7.0
+pandas>=1.5.0
+
+# Machine learning utilities
+scikit-learn>=1.1.0
+scikit-image>=0.19.0
+
+# Wavelet processing
+PyWavelets>=1.4.0
+
+# Visualisation
+matplotlib>=3.6.0
+
+# Jupyter notebooks
+jupyter>=1.0.0
+notebook>=6.5.0
+ipykernel>=6.0.0
