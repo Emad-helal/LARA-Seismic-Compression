@@ -19,42 +19,79 @@ HARA-Seismic-Compression/
 └── README.md
 ```
 ---
-Dataset
-Experiments use the STEAD dataset (Mousavi et al., 2019), filtered to local earthquakes within 60 km and magnitude > 3. Download at: https://github.com/smousavi05/STEAD
+
+## Dataset
+
+Experiments use the **STEAD** dataset (Mousavi et al., 2019), filtered to local earthquakes within 60 km and magnitude > 3. Download at: https://github.com/smousavi05/STEAD
+
 Update the data paths in each notebook before running:
+
 ```python
 csv_file  = "path/to/merged.csv"
 file_name = "path/to/merged.hdf5"
 ```
+
 ---
-Installation
+
+## Installation
+
 ```bash
 git clone https://github.com/Emad-helal/HARA-Seismic-Compression.git
 cd HARA-Seismic-Compression
 pip install -r requirements.txt
 ```
----
-Usage
-Notebook	Description
-`Final_Enhanced_Autoencoder_with_Wavelet_comparisons.ipynb`	Trains and evaluates all models across CRs 2–100; compares against wavelet baselines (db4, sym8, coif3)
-`Ablation_study.ipynb`	Evaluates five architectural variants: Base, No-Attention, Plain-Conv, Light, and Heavy capacity
----
-Models
-Main comparison (`Final_Enhanced_Autoencoder_with_Wavelet_comparisons.ipynb`)
-Model	Type
-`HeavyAdvancedResidualAutoencoder`	Proposed — residual blocks + channel attention
-`GeneralizedAutoencoder`	Neural baseline
-`AE_PureConcat`	Neural baseline
-Wavelet (db4 / sym8 / coif3)	Classical baseline
-Ablation study (`Ablation_study.ipynb`)
-Variant	Description
-`AdvancedResidualAutoencoder`	Base model (full architecture)
-`NoAttentionAdvancedResidualAutoencoder`	Attention blocks removed
-`PlainConvAdvancedAutoencoder`	Residual connections replaced by plain convolutions
-`LightAdvancedResidualAutoencoder`	Channel counts halved (50% capacity)
-`HeavyAdvancedResidualAutoencoder`	Channel counts doubled (proposed, 2× capacity)
+
 ---
 
+## Usage
+
+| Notebook | Description |
+|----------|-------------|
+| `Final_Enhanced_Autoencoder_with_Wavelet_comparisons.ipynb` | Trains and evaluates all models across CRs 2–100; compares against wavelet baselines (db4, sym8, coif3) |
+| `Ablation_study.ipynb` | Evaluates five architectural variants: Base, No-Attention, Plain-Conv, Light, and Heavy capacity |
+
+---
+
+## Models
+
+**Main comparison** (`Final_Enhanced_Autoencoder_with_Wavelet_comparisons.ipynb`)
+
+| Model | Type |
+|-------|------|
+| `HeavyAdvancedResidualAutoencoder` | **Proposed** — residual blocks + channel attention |
+| `GeneralizedAutoencoder` | Neural baseline |
+| `AE_PureConcat` | Neural baseline |
+| Wavelet (db4 / sym8 / coif3) | Classical baseline |
+
+**Ablation study** (`Ablation_study.ipynb`)
+
+| Variant | Description |
+|---------|-------------|
+| `AdvancedResidualAutoencoder` | Base model (full architecture) |
+| `NoAttentionAdvancedResidualAutoencoder` | Attention blocks removed |
+| `PlainConvAdvancedAutoencoder` | Residual connections replaced by plain convolutions |
+| `LightAdvancedResidualAutoencoder` | Channel counts halved (50% capacity) |
+| `HeavyAdvancedResidualAutoencoder` | Channel counts doubled (proposed, 2× capacity) |
+
+---
+
+## Citation
+
+```bibtex
+@article{helal2025hara,
+  title   = {Attention-Enhanced Heavy Advanced Residual Autoencoder for Seismic Waveform Compression},
+  author  = {Helal, Emad B. and others},
+  journal = {Computers & Geosciences},
+  year    = {2025},
+  doi     = {}
+}
+```
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
 Citation
 ```bibtex
 @article{helal2026hara,
