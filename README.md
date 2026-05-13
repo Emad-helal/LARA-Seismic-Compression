@@ -50,7 +50,7 @@ Wavelet (db4 / sym8 / coif3)	Classical baseline
 Citation
 ```bibtex
 @article{helal2025hara,
-  title   = {Attention-Enhanced Heavy Advanced Residual Autoencoder for Seismic Waveform Compression},
+  title   = {Seismic Waveform Compression Using Attention-Enhanced Autoencoder},
   author  = {Helal, Emad B. and others},
   journal = {Computers \& Geosciences},
   year    = {2025},
