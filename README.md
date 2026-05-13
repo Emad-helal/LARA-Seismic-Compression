@@ -78,12 +78,12 @@ pip install -r requirements.txt
 ## Citation
 
 ```bibtex
-@article{helal2025hara,
-  title   = {Attention-Enhanced Heavy Advanced Residual Autoencoder for Seismic Waveform Compression},
-  author  = {Helal, Emad B. and others},
-  journal = {Computers & Geosciences},
-  year    = {2025},
-  doi     = {}
+@article{helal2026hara,
+  title={Seismic Waveform Compression Using an Attention-Enhanced Heavy Residual Autoencoder},
+  author={Helal, Emad B. and Hafez, Ali G. and Khan, Rizwan and Ibrahim, Mostafa M.},
+  journal={Computers \& Geosciences},
+  year={2026},
+  note={Submitted}
 }
 ```
 
@@ -93,15 +93,7 @@ pip install -r requirements.txt
 
 MIT License — see [LICENSE](LICENSE) for details.
 Citation
-```bibtex
-@article{helal2026hara,
-  title={Seismic Waveform Compression Using an Attention-Enhanced Heavy Residual Autoencoder},
-  author={Helal, Emad B. and Hafez, Ali G. and Khan, Rizwan and Ibrahim, Mostafa M.},
-  journal={Computers \& Geosciences},
-  year={2026},
-  note={Submitted}
-}
-```
+
 ---
 License
 MIT License — see LICENSE for details.
