@@ -50,11 +50,11 @@ Wavelet (db4 / sym8 / coif3)	Classical baseline
 Citation
 ```bibtex
 @article{helal2026hara,
-  title   = {Seismic Waveform Compression Using Attention-Enhanced Autoencoder},
-  author  = {E.B. Helal et al.},
-  journal = {Computers \& Geosciences},
-  year    = {2026},
-  doi     = {}
+  title={Seismic Waveform Compression Using an Attention-Enhanced Heavy Residual Autoencoder},
+  author={Helal, Emad B. and Hafez, Ali G. and Khan, Rizwan and Ibrahim, Mostafa M.},
+  journal={Computers \& Geosciences},
+  year={2026},
+  note={Submitted}
 }
 ```
 ---
