@@ -38,7 +38,7 @@ Usage
 Notebook	Description
 `Final_Enhanced_Autoencoder_with_Wavelet_comparisons.ipynb`	Trains and evaluates all models across CRs 2–100; compares against wavelet baselines (db4, sym8, coif3)
 `Ablation_study.ipynb`	Evaluates five architectural variants: Base, No-Attention, Plain-Conv, Light, and Heavy capacity
----
+
 Models
 Model	Type
 `HeavyAdvancedResidualAutoencoder`	Proposed — residual blocks + channel attention
@@ -46,7 +46,7 @@ Model	Type
 `GeneralizedAutoencoder`	Neural baseline
 `AE_PureConcat`	Neural baseline
 Wavelet (db4 / sym8 / coif3)	Classical baseline
----
+
 Citation
 ```bibtex
 @article{helal2025hara,
