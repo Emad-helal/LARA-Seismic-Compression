@@ -94,6 +94,4 @@ pip install -r requirements.txt
 MIT License — see [LICENSE](LICENSE) for details.
 Citation
 
----
-License
-MIT License — see LICENSE for details.
+
