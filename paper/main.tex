@@ -1,0 +1,835 @@
+\documentclass[fleqn,10pt]{wlscirep}
+\pdfminorversion=6
+
+% -------------------- Mathematics --------------------
+\usepackage{amsmath}
+\usepackage{amsfonts}
+
+% -------------------- Algorithms ---------------------
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+% -------------------- Tables & Figures ---------------
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{dblfloatfix}
+\usepackage{float}
+\usepackage{booktabs}
+
+% -------------------- Text & References ---------------
+\usepackage{textcomp}
+\usepackage{url}
+\usepackage{verbatim}
+\usepackage{cite}
+
+% -------------------- Fix for table of contents ---------------
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd{\l@subsubsection}{\bfseries}{}{}{}
+\makeatother
+
+% -------------------- Improved figure placement ---------------
+\renewcommand{\topfraction}{0.85}
+\renewcommand{\bottomfraction}{0.85}
+\renewcommand{\textfraction}{0.15}
+\renewcommand{\floatpagefraction}{0.85}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{3}
+\setcounter{totalnumber}{4}
+
+% Let TeX stretch interword space slightly to avoid overfull lines caused by the
+% long unbreakable tokens this manuscript inherits from the model and dataset
+% names (AE_PureConcat, HeavyCapacityResidual, and the like).
+\setlength{\emergencystretch}{3em}
+\providecommand{\JournalTitle}[1]{\emph{#1}}
+
+% -------------------- Hyperref (load last) ---------------
+%\usepackage[bookmarks=false]{hyperref}
+
+% -------------------- Title and Authors --------------------
+\title{Seismic Waveform Compression Using a Light Attention-Enhanced Residual Autoencoder}
+
+\author[1,2]{Emad B. Helal}
+\author[1,3]{Omar M. Saad}
+\author[1,4]{Ali G. Hafez}
+\author[5]{Rizwan Khan}
+\author[6]{A. A. Donkol}
+\author[7,8,*]{Mostafa M. Ibrahim}
+
+\affil[1]{Seismology Department, National Research Institute of Astronomy and Geophysics (NRIAG), Helwan 11421, Egypt}
+\affil[2]{Cyber Security Department, College of Engineering, Almaaqal University, Basrah 61014, Iraq}
+\affil[3]{Division of Physical Science and Engineering, King Abdullah University of Science and Technology (KAUST), Thuwal 23955-6900, Saudi Arabia.}
+\affil[4]{Control and Computer Department, College of Engineering, Almaaqal University, Basrah 61014, Iraq}
+\affil[5]{Electronics and Computer Engineering department, University of Limerick, Ireland}
+\affil[6]{Electrical Engineering, communication and electronics department, Faculty of engineering, Qena University, Egypt}
+\affil[7]{Electrical Engineering Department, Faculty of Engineering, Minia University, Minia 61519, Egypt}
+\affil[8]{Communications and Computers Engineering Department, Faculty of Engineering, Nahda University in Beni Suef, Beni Suef 62764, Egypt}
+\affil[*]{mostafa.ibrahim@mu.edu.eg}
+
+% -------------------- Abstract --------------------
+\begin{abstract}
+Efficient storage and transmission of seismic waveforms are essential for seismological monitoring, but existing methods often fail to preserve signal quality at moderate-to-high compression ratios. Wavelet approaches cannot adapt to varying frequency content, while conventional deep architectures degrade high-frequency content and phase fidelity. We introduce the Light Autoencoder for Reconstruction and Analysis (LARA), an end-to-end model coupling hierarchical residual learning and channel-wise attention with a filled projection bottleneck. A separate set of weights was optimised for each of ten compression ratios from 2:1 to 100:1 on 25,091 local-earthquake records from the STanford EArthquake Dataset. LARA attains the highest signal-to-noise ratio among the three learned models at every ratio, exceeding the better baseline by 0.22 to 2.52~dB, and delivers 13.5~dB of reconstruction SNR per million parameters against 4.8 and 4.3~dB for the two baselines. A controlled ablation of the training objective shows that no spectral-, phase-, or wavelet-domain objective improves on the mean squared error, which we therefore retain. Quantising and entropy-coding the latent, rather than citing its dimensionality, reduces the transmitted size by a factor of 4.1 to 9.0 at no more than 0.5~dB additional reconstruction loss, and we report the resulting bits per sample together with the cost of transmitting the decoder. Encoding and decoding latency, arithmetic complexity, and memory are reported on both CPU and GPU hardware, where the arithmetic coder rather than the network is found to limit throughput. An exploratory assessment without fine-tuning, on the Texas Earthquake Dataset, the INSTANCE dataset, and distributed acoustic sensing data from the Utah FORGE site, indicates that the learned representation transfers beyond the training distribution; these external results were obtained on the earlier heavy-capacity configuration and are reported unchanged.
+\end{abstract}
+
+% -------------------- Keywords --------------------
+\keywords{Seismic waveform compression, Deep learning, Residual autoencoder, Channel attention mechanism, Convolutional neural networks, Rate--distortion, Bits per sample, Computational cost, Distributed acoustic sensing}
+
+% -------------------- Document -------------------
+\def\JournalTitle#1{#1}
+\begin{document}
+
+\maketitle
+
+\section*{Introduction}
+\label{intro}
+
+Seismic data acquisition generates massive volumes of information essential for applications ranging from earthquake monitoring and crustal studies to hydrocarbon exploration. These massive datasets require substantial storage capacity for archiving or channel bandwidth for data transmission from seismic stations to a central hub. Therefore, compressing seismic data is essential. It saves storage and reduces transmission costs, while preserving signal quality required for accurate analysis and interpretation.
+
+Classical transformation-based compression methods rely on converting seismic data from one spatial domain to another (such as a frequency domain) using static transformations. Several strategies have been developed within this framework by projecting seismic signals onto appropriate transform domains. For example, wavelet transform has been widely used to compress seismic data \cite{villasenor1996seismic,fajardo2015seismic,zhang2014seismic}. In \cite{villasenor1996seismic}, a method has been proposed to compress large-scale seismic datasets by applying multidimensional wavelet transforms to take advantage of correlations and redundancy between traces. While the work in \cite{fajardo2015seismic} focused on a two-dimensional lifting scheme that achieves higher computational efficiency, reduces complexity, and speeds up implementation. Although wavelets typically perform well in compression, their effectiveness decreases when dealing with the highly oscillatory nature of seismic data, which limits the compression ratios that can be achieved. To overcome this limitation, alternatives such as wavelet packets have been used \cite{averbuch2001low}, and hybrid approaches combining wavelets and wavelet packets have been explored \cite{averbuch2013lct}.
+
+After the great successes achieved by machine learning (ML) and deep learning (DL) techniques in multiple tasks such as classification \cite{mehmood2024utilizing,hamida20183}, image enhancement \cite{khan2024lit,yao2024spatial}, and object recognition \cite{eman2023innovative,zhang2024few}, it has also been employed in the field of data compression. In this type of method, static transformations are not used, but rather transformations are learned from training data in a latent space, allowing models to extract the most useful aspects of seismic data. Several studies \cite{nuha2017seismic,brankovic2021machine,reddy2012nonlinear,zheng2019fidelity,liu2018distributed} have been applied for this purpose, using principal component analysis (PCA) in both its linear \cite{nuha2017seismic} and nonlinear \cite{reddy2012nonlinear} forms. Alignment-enhanced PCA achieves higher compression rates with minimal reconstruction error, while neural network-based nonlinear PCA preserves features more effectively. Distributed PCA methods also improved efficiency, with fidelity-restricted DPCA \cite{zheng2019fidelity} and global principal component frameworks offering higher compression ratios superior to traditional methods such as Local PCA (LPCA) and DCT-2D \cite{liu2018distributed}. Recently, Lucena et al. \cite{lucena2025multi} presented a hybrid method for lossy compression of seismic data that combines PCA, DWT, thresholding, quantization, and entropy coding. Although this method takes advantage of both time correlation and multi-scale frequency information to achieve high compression rates and low reconstruction errors in the relevant seismic frequency bands, it increases computational complexity and may be sensitive to parameter tuning.
+
+Besides ML, neural networks have also been exploited to compress seismic data \cite{nuha2018seismic}. Nuha et al. presented a lightweight auto-associative neural network based on pre-training using a restricted Boltzmann machine (RBM) \cite{hinton2006reducing} with optimization via a scaled conjugated gradient (SCG) \cite{moller1993scaled} algorithm to achieve real-time compression of seismic data in geophones \cite{nuha2018seismic}. Although a single-layer neural network is capable of compressing data in real time, it is unable to capture all input features. To overcome this, the authors expanded it by adding hidden layers and proposed a deep neural network supported by RBM-based pre-training, combined with prediction and entropy coding, which significantly outperformed linear prediction compression (LPC) in terms of reconstruction quality \cite{nuha2019seismic2}. A two-stage variational neural network with a hyperprior scale has also been proposed to compress seismic data \cite{wang2024deep}. This method has achieved very high compression ratios with strong reconstruction accuracy, but this requires complex deep learning models and significant computational resources for training and implementation.
+
+Several seismic data compression methods have been developed based on convolutional neural networks (CNNs) \cite{lecun1989backpropagation,helal2021seismic,nuha2020deep,devoti2019wavefield,iqbal20221}. Helal et al. \cite{helal2021seismic} presented two models of a convolutional autoencoder (CAE) for compressing 1D seismic data. The first model, which relies on deeper convolutional layers, performs better at low compression ratios (CRs), while the second model with a dual-path structure excels at medium and high compression ratios. However, relying on two integrated models rather than a unified model increases the computational burden and memory requirements during training and storage. Additionally, Helal's approach was tested on a small dataset from East Texas in the United States, rather than relying on large, standard datasets such as STEAD. Another approach known as the stacked autoencoder extreme learning machine (AE-ELM) has also been proposed to compress one-dimensional seismic data \cite{nuha2020deep}. This approach combines asymmetric deep autoencoders with analytically calculated weights, enabling fast training, high compression ratios, and competitive reconstruction quality. Similarly, Devoti et al. \cite{devoti2019wavefield} proposed CNN-based compression techniques for the seismic wavefield using both CAE and U-net \cite{ronneberger2015u}, to reduce storage requirements and I/O operations in full wave inversion (FWI) and time-reversal migration applications, while maintaining a balance between compression efficiency and reconstruction quality. In another contribution, Iqbal \cite{iqbal20221} combined one-dimensional CNN with single-bit adaptive delta modulation to design a lightweight compression method that achieves high compression ratios. Although this method is effective for real-time field applications, it has been trained offline on synthetic data, which may limit its ability to generalize when applied to real and diverse datasets such as STEAD.  More recently, Chen et al. \cite{chen2025dascompression} proposed a deep learning framework specifically tailored to distributed acoustic sensing (DAS) data, achieving strong compression performance by exploiting the dense spatial redundancy across DAS channels. However, this approach is trained and evaluated exclusively within the DAS domain, leaving open the question of whether a single model can generalize across both conventional point-sensor seismic data and DAS acquisitions without retraining, a gap that the present work directly addresses.
+
+To address these limitations, this paper introduces the Light Autoencoder for Reconstruction and Analysis (LARA), a novel architecture for seismic compression. Our approach integrates residual learning blocks with channel attention mechanisms to create a specialized architecture that directly addresses the challenges of seismic data preservation under aggressive compression. The residual connections facilitate training of deeper networks while mitigating information loss. The attention mechanism enables dynamic feature recalibration to emphasize wave critical components.
+
+\section{System Model}
+\label{sec:system}
+
+The proposed seismic compression framework is based on an enhanced residual autoencoder with integrated channel attention mechanisms. The purpose of this design is to achieve efficient compression of seismic traces while maintaining waveform fidelity critical for downstream seismic analysis, such as earthquake detection and magnitude estimation. Unlike conventional autoencoders, which may degrade performance at high compression ratios, the proposed model incorporates residual learning \cite{He_2016_CVPR} and adaptive channel attention \cite{Hu_2018_CVPR} to ensure robust feature preservation across multiple scales. This section details the encoder-decoder architecture, the mathematical formulation of the residual and attention blocks, and the properties of the latent representation that guide the reconstruction process.
+
+\subsection{System Architecture}
+\label{subsec:architecture}
+
+The architecture is composed of three main stages: an encoder for feature compression, residual blocks with channel attention for feature refinement, and a decoder for waveform reconstruction as shown in Fig.~\ref{fig:architecture}. The encoder takes as input a normalized waveform of length L = 1500 samples, represented as a one-dimensional array $x \in \mathbb{R}^{1 \times 1500}$. The normalization to [0,1] ensures numerical stability during training by eliminating amplitude scale discrepancies between traces.
+The encoder mapping is expressed as
+\begin{equation}
+    z = f_{\text{encoder}}(x; \theta_e)
+\end{equation}
+where $\theta_e = \{ W_i, b_i \}_{i=1}^{N}$ are the learnable parameters, and z is the latent representation.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\textwidth]{Figures/Final_LARA_pipeline.eps}
+\caption{End-to-end residual autoencoder architecture showing the filled projection bottleneck, attention-enhanced residual blocks, and the channel-pyramid decoder.}
+\label{fig:architecture}
+\end{figure}
+
+The encoder begins with a one-dimensional convolutional layer with kernel size k = 15, stride s = 2, and padding p = 7. This expands the input from a single channel to 32 feature channels while simultaneously halving the temporal resolution from 1500 to 750 samples:
+
+\begin{equation}
+h_1 = \varphi\!\left(\mathrm{BN}(W_1 \ast x + b_1)\right)
+\end{equation}
+where $W_1$ and $b_1$ are the learnable kernel and bias, * denotes convolution, BN is batch normalization, and $\varphi(.)$ is the Exponential Linear Unit (ELU). The role of this initial convolution is to extract low-level temporal features such as impulsive onsets and short-term oscillations. Batch normalization (BN) is applied immediately after the convolution to standardize the feature distribution, followed by the Exponential Linear Unit (ELU) activation function, chosen for its ability to mitigate vanishing gradients while maintaining negative values. A channel attention module follows this stem, so the reweighting described below is applied before any further downsampling.
+
+The encoder then applies three residual blocks, each of which halves the temporal resolution while doubling the channel width: 32 to 64 and 750 to 375 samples, 64 to 128 and 375 to 188 samples, and, where the compression ratio demands it, 128 to 256 and 188 to 94 samples. The third block is a conditional component and is instantiated only when $\mathrm{CR} > 30$; the resulting channel width entering the bottleneck is therefore 256 for $\mathrm{CR} \leq 30$ and 512 for $\mathrm{CR} > 30$ in the sense of the number of feature maps, although, as described below, no channel dimension survives into the transmitted code.
+
+The bottleneck itself has three stages. A one-dimensional convolution with kernel size 1 reduces the feature maps to $B$ channels, adaptive average pooling (AAP) \cite{lin2013network} reduces the temporal axis to a fixed length $T$, and a single linear projection maps the flattened result to the transmitted code. For $\mathrm{CR} \geq 10$ we set $B = 32$ and take $T = L_{f}$, which is 188 samples for $\mathrm{CR} \leq 30$ and 94 samples for $\mathrm{CR} > 30$, so the projection always has $B T = 6016$ or $3008$ columns regardless of the target ratio. For $\mathrm{CR} < 10$ we set $B = 16$ and take $T = \min(1500/\mathrm{CR}, L_{f})$. Holding $T$ independent of the target ratio is what we refer to as a \emph{filled funnel}: because the pooled width does not contract as the compression target becomes more severe, the projection retains its full expressivity at high ratios instead of collapsing towards a narrow matrix. The output of the encoder is a single flat vector,
+
+\begin{equation}
+z = f_{\text{enc}}\!\left(W_{p}\,\mathrm{AAP}\big(\varphi(W_{b} \ast h_{3}))\right) \in \mathbb{R}^{\,1500/\mathrm{CR}},
+\end{equation}
+
+which contains exactly $1500/\mathrm{CR}$ real values. The compression ratio is therefore $\mathrm{CR} = 1500/(1500/\mathrm{CR})$ by construction, and we verify this for every trained model rather than assuming it. A further consequence, which we make explicit because it determines how the compression ratio should be read, is that $z$ has no channel dimension at all: it is a vector, not a $C \times (1500/\mathrm{CR})$ array, so the number of transmitted values is $1500/\mathrm{CR}$ and not $C \cdot (1500/\mathrm{CR})$.
+
+\subsection{Residual Block and Channel Attention}
+\label{subsec:residual}
+
+The proposed architecture is built upon Enhanced Residual Blocks, a fundamental component that facilitates the training of very deep networks by mitigating the vanishing gradient problem. Each block consists of two one-dimensional convolutional layers with kernel size k=3, neither of which carries a bias, since a batch normalization layer immediately follows each and would otherwise render the bias redundant. The first convolution is followed by batch normalization and an Exponential Linear Unit (ELU) activation; the second is followed by batch normalization only.
+
+The defining feature of the residual block is the skip connection, which performs an element-wise addition of the block's projected input to its output. This allows the block to learn a residual mapping instead of a complete transformation, simplifying the learning objective and preserving gradient flow throughout the network. The operation of a single block is defined as:
+
+\begin{equation}
+y = \varphi\!\Big(\mathrm{BN}(W_2 \ast \mathrm{BN}(W_1 \ast x))\Big) + S(x),
+\end{equation}
+
+where $W_1$ and $W_2$ are the bias-free convolutional kernels, BN is batch normalization, $\ast$ denotes the convolution operation, $\varphi(.)$ is the ELU activation, and $S(x)$ is the skip connection. The activation therefore acts on the residual branch only, and the two branches are summed after the second normalization. When the stride is 2, or when the input and output channel counts differ, $S$ cannot be the identity and is instead a learned one-dimensional convolution with kernel size 1 followed by batch normalization; the block is not shape-valid without it. This ensures that the block learns a residual mapping, improving gradient flow and avoiding feature degradation.
+
+To further enhance the representational power of the network, a channel attention mechanism is integrated into each residual block. This module adaptively recalibrates channel-wise feature responses by modeling interdependencies between channels, allowing the network to selectively emphasize informative features and suppress less useful ones.
+
+An integral addition to the residual block is the channel attention mechanism. This module adaptively reweights each channel, allowing the network to focus on informative seismic features. The process begins with global average pooling (GAP), which compresses each channel into a scalar descriptor representing its global importance. This descriptor is passed through a bottleneck transformation consisting of a reduction convolution, ReLU activation, and an expansion convolution. The final sigmoid activation generates channel-wise weights a, defined as:
+
+\begin{equation}
+a = \sigma\Big( W_2 \, \delta\big( W_1 \, \mathrm{GAP}(x) + b_1 \big) + b_2 \Big)
+\end{equation}
+
+where $\delta(.)$ is the ReLU activation, $\sigma(.)$ is the sigmoid function, and GAP denotes global average pooling, and $W_1$, $b_1$, $W_2$, $b_2$ are the weights and biases of the bottleneck layers. These weights are applied elementwise to the input features:
+\begin{equation}
+x' = x \odot a
+\end{equation}
+This ensures that channels carrying salient waveform patterns are amplified, while redundant or noisy channels are suppressed. In seismic applications, this mechanism is particularly valuable, as it enables the model to emphasize waveform arrivals and spectral content that are critical for event classification and magnitude estimation.
+
+The latent vector is the whole of the transmitted representation, and its length is set by the chosen compression ratio. The bottleneck therefore forces the network to discard redundancy while retaining the structure required for accurate reconstruction. For lower ratios the code is longer and preserves more fine-grained detail; for higher ratios it is shorter, and the residual and attention mechanisms are what allow critical structural information to survive.
+
+The decoder is deliberately not a mirror of the encoder, and we state this because the two differ in ways that matter for both accuracy and cost. A linear projection first expands the code back to $B T$ values, which are reshaped into a $B$-channel feature map of length $T$. This map is then upsampled to the full 1500 samples by a six-level channel pyramid: each level applies nearest-neighbour upsampling to a preassigned target length, followed by a bias-free one-dimensional convolution with kernel size 5, batch normalization, and an ELU. The channel width doubles at every level until it reaches a ceiling of 64, and then remains there, so the decoder is narrow regardless of how wide the encoder was. Writing $r = 1500/T$ for the required expansion, the target length at level $k$ is
+
+\begin{equation}
+\ell_k = \mathrm{round}\!\left(T\, r^{(k+1)/6}\right), \qquad k = 1, \dots, 6,
+\end{equation}
+
+with $\ell_6 = 1500$, and the level computes $\mathrm{BN}\big(W_k \ast U_{k}(h_{k-1})\big)$ followed by the ELU. A two-layer refinement head then produces the output, first a convolution from 64 to 32 channels with kernel size 5, then a convolution from 32 to 1 channel with kernel size 15 followed by a sigmoid, which confines the reconstruction to $[0,1]$:
+
+\begin{equation}
+\hat{x} = \sigma\!\left(W_{\text{out}} \ast \varphi\!\left(W_{\text{ref}} \ast h_{6} + b_{\text{ref}}\right) + b_{\text{out}}\right).
+\end{equation}
+
+The complete decoder function is therefore $\hat{x} = f_{\text{decoder}}(z; \theta_{d})$, and the combined encoder-decoder mapping implements the end-to-end autoencoder
+
+\begin{equation}
+\hat{x} = f_{\text{decoder}}\big(f_{\text{encoder}}(x; \theta_{e}); \theta_{d}\big).
+\end{equation}
+
+Training minimizes reconstruction loss using the Adam optimizer \cite{kingma2015adam}, which adaptively adjusts learning rates for stability:
+
+\begin{equation}
+\mathcal{L} = \| x - \hat{x} \|_2^2,
+\end{equation}
+
+and Section~\ref{subsec:loss-ablation} reports a controlled comparison of this objective against five spectral, phase, and wavelet-domain alternatives.
+
+\section{Simulation Results}
+\label{sec:results}
+
+To evaluate the efficiency of the proposed LARA architecture, a comparative analysis was performed against two autoencoder models (Generalized Autoencoder and AE PureConcat) and three wavelet-based compression methods on the STanford EArthquake Dataset (STEAD). The dataset was filtered to local earthquakes of magnitude greater than 2.5 recorded within 60~km of the source, on the vertical component, and every waveform was truncated to 1,500 samples and rescaled to $[0,1]$ on a per-trace basis. We report the filter as a magnitude threshold of 2.5 rather than 3: the weaker events raise the pool from 14,983 to 25,091 traces and broaden the range of signal-to-background ratios that the codec is required to handle, and Section~\ref{subsec:discussion} discusses what this does and does not establish about generalization.
+
+Each compression ratio is served by a separate set of trained weights rather than by a single network conditioned on the target ratio. This is a deliberate choice, and it has a consequence for the architecture as well as for the training: since the transmitted code length is fixed at $1500/\mathrm{CR}$ and the conditional third encoder block is instantiated only for $\mathrm{CR} > 30$, a single parameter set cannot serve all ratios without a variable-length output and a runtime branch. Every hyper-parameter is identical across the ten ratios, and the data, split, and initial random seed are shared, so any difference between ratios reflects the target and the architecture it induces rather than a difference in tuning. We nevertheless verify the achieved ratio for every trained model by measuring the latent width directly instead of assuming it, and we report the measured value.
+
+The data are partitioned 80\%/10\%/10\% into training, validation, and test subsets at a fixed seed, and the split is performed in two stages so that the test subset is held out before the training and validation subsets are drawn from the remainder. The test subset is never used for early stopping, for learning-rate reduction, or for any other form of model selection. All reported metrics are computed on the first 200 traces of the test subset, which are drawn once and used for every model and every ratio. Training uses Adam with a learning rate of $2\times10^{-4}$ and weight decay $10^{-5}$, gradient-norm clipping at 1.0, a learning-rate reduction by a factor of 0.5 when the validation loss plateaus for five epochs, a cap of 120 epochs, and early stopping at a patience of eight epochs. Because the cap is uniform across ratios and early stopping determines the effective duration, the comparison is not confounded by a ratio-dependent training budget. The two baseline autoencoders are trained under the same data, split, and batch size with a cap of 100 epochs and a learning rate of $5\times10^{-4}$. The batch size is 64 for all models.
+
+\subsection{STEAD Dataset}
+\label{subsec:stead}
+
+STanford EArthquake Dataset (STEAD) \cite{mousavi2019stanford} is a large-scale, open-access earthquake waveform dataset. All waveforms were standardized to a fixed window of 1,500 samples, which at the native 100~Hz sampling rate corresponds to 15~s. The vertical component was extracted for each chosen event, since local earthquake recordings frequently show the clearest P-wave onset in this channel. We evaluate on local earthquakes rather than noise-dominated traces, and we use a magnitude threshold of 2.5 so that weaker events, which carry lower signal-to-background ratios, remain in the pool; raising the threshold to 3 would remove roughly forty per cent of the records. Operational seismology uses events of this class for early warning and hazard assessment \cite{cauzzi2018shakemap}, and the 60~km distance limit reduces the strong attenuation that develops at larger distances while preserving high-frequency arrivals such as clear P- and S-waves. This range therefore retains the source-specific features needed to judge whether compression preserves source information \cite{aki2002quantitative}, and it yields a homogeneous pool that reflects routine monitoring conditions while avoiding a strong bias towards either large or distant events \cite{mousavi2020earthquake}. The filtered dataset contains 25,091 waveforms, partitioned into 20,073 training, 2,509 validation, and 2,509 test traces.
+
+\subsection{Generalized Autoencoder Configuration}
+\label{subsec:genae}
+
+The Generalized Autoencoder \cite{Helal2025} holds a fixed encoder--decoder structure and varies only the length of the code to reach the target ratio. Its encoder is two 1D convolutions with 16 and then 32 channels, kernel size 9 and stride 2, which reduce the 1500-sample input to 375 samples, followed by a flattening operation and a single linear projection to $1500/\mathrm{CR}$ values. The decoder inverts this with two transposed convolutions, ReLU activations between layers, and a final sigmoid so that the output is confined to $[0,1]$. It is trained with Adam at a learning rate of $5\times10^{-4}$ for at most 100 epochs with early stopping at a patience of eight, on the mean squared error, with no ratio-specific tuning.
+
+\subsection{AE PureConcat Model Configuration}
+\label{subsec:aepure}
+
+The AE PureConcat \cite{helal2021seismic} does not use pooling, and its decoder is not a stack of transposed convolutions, so we describe it as implemented. The code is formed by concatenating the outputs of two or four parallel branches, each of which applies a 1D convolution with kernel size 3 to the full 1500-sample input, an ELU activation, dropout at a rate of 0.1, a flattening operation, and a linear projection to its share of the code; the shares sum to exactly $1500/\mathrm{CR}$, so the target ratio is exact by construction. The reconstruction is then produced by a single linear map from the concatenated code back to 1500 outputs followed by a sigmoid. The number of branches and their channel counts were selected per ratio in the original study \cite{helal2021seismic} to maximize SNR, and we retain those choices: four branches of 16 feature maps for CR = 2, 3, and 5; two branches of 16 feature maps for CR = 10, 15, 20, 50, 60, and 100; and two branches of 8 feature maps for CR = 30. It is trained with Adam at a learning rate of $5\times10^{-4}$ for at most 100 epochs with early stopping at a patience of eight, on the mean squared error, with a batch size of 64.
+
+\subsection{Wavelet Methods Configuration}
+\label{subsec:wavelet}
+
+Three well-known wavelet families were used in the comparative analysis: Symlets 8 (sym8) \cite{daubechies1992ten,misiti2013wavelets}, Daubechies 4 (db4) \cite{daubechies1992ten,mallat1999wavelet}, and Coiflets 3 (coif3) \cite{coifman1992entropy,graps1995introduction}. These wavelet types were chosen because of their varied symmetry, vanishing moments, and regularity characteristics as well as their shown effectiveness in seismic signal processing applications. To achieve the desired compression ratios, each wavelet compressor used a 6-level decomposition with severe thresholding. The best threshold value to keep just the top K coefficients was determined throughout the compression process. K = N/CR, where N is the original signal length (1500 samples). The remaining coefficients were utilized for signal reconstruction, while coefficients below the computed threshold were eliminated. This method preserves the crucial time-frequency features of seismic signals while guaranteeing exact control over the obtained compression ratio. These particular wavelet families were chosen because of their proven effectiveness in seismic signal processing applications \cite{zhang2003automatic,baillard2014automatic}.
+
+\subsection{Evaluation Criteria}
+\label{subsec:evaluation}
+
+All methods are assessed on reconstruction quality, and the reconstruction error is additionally broken down into spectral terms in Section~\ref{subsec:cost}. Reconstruction quality is summarized by four metrics, each of which is computed trace by trace and then averaged over the 200 evaluation traces, so that a single poorly reconstructed trace cannot dominate the result. We also report the standard deviation and the interquartile range of the SNR, because a mean alone conceals the spread that matters when a codec is deployed on mixed data.
+
+The first metric is the signal-to-noise ratio \cite{oppenheim1997signals}, evaluated on each trace as
+\begin{equation}
+\label{eq:snr}
+\mathrm{SNR}_i = 10 \, \log_{10} \frac{\frac{1}{L}\sum_{j=1}^{L} x_{ij}^{2}}
+                                          {\frac{1}{L}\sum_{j=1}^{L} (x_{ij} - \hat{x}_{ij})^{2}} ,
+\end{equation}
+and the value reported for a given model and ratio is the arithmetic mean of $\mathrm{SNR}_i$ over the evaluation traces. We stress that this is a mean of per-trace decibel values and not the decibel of a pooled error, and that the two are not interchangeable: the former gives every trace equal weight, whereas the latter is dominated by the noisiest traces. Our quoted figures are therefore systematically lower than a pooled-error definition would produce, and we consider the per-trace form the more appropriate choice for this application, since a codec that fails on a minority of traces is not usable even if its pooled error is small.
+
+The second metric is the peak signal-to-noise ratio \cite{jahne2005digital},
+\begin{equation}
+\mathrm{PSNR}_{\mathrm{dB}} = 20 \, \log_{10} \left( \frac{1}{\sqrt{\mathrm{MSE}}} \right),
+\end{equation}
+where the data range is 1.0 because the traces are rescaled to $[0,1]$. We state this explicitly because the peak amplitude of the trace does \emph{not} enter this expression: with a fixed data range, PSNR is a deterministic function of the mean squared error and differs from the SNR of Eq.~\eqref{eq:snr} by a constant, which we find to be 6.11 to 6.13~dB across all models and ratios. PSNR is therefore reported for comparability with prior work but carries no information independent of MSE, and we do not draw conclusions from it.
+
+The third metric is the correlation coefficient \cite{bendat2011random},
+\begin{equation}
+\mathrm{CC} =
+\frac{\sum_{i=1}^{L} (x_i - \bar{x}) (\hat{x}_i - \bar{\hat{x}})}
+     {\sqrt{\sum_{i=1}^{L} (x_i - \bar{x})^2} \, \sqrt{\sum_{i=1}^{L} (\hat{x}_i - \bar{\hat{x}})^2}} ,
+\end{equation}
+which measures waveform shape without regard to amplitude scaling and is the metric we regard as most directly relevant to phase identification and cross-correlation analysis.
+
+The fourth is the structural similarity index \cite{wang2006modern}. We use the standard windowed form, applied to the flattened trace with a uniform window and a data range of 1.0, so that the local statistics of the numerator and denominator are evaluated in a neighbourhood rather than over the whole record:
+\begin{equation}
+\mathrm{SSIM}(x, \hat{x}) =
+\frac{(2 \mu_x \mu_{\hat{x}} + C_1)(2 \operatorname{cov}(x, \hat{x}) + C_2)}
+     {(\mu_x^2 + \mu_{\hat{x}}^2 + C_1)(\sigma_x^2 + \sigma_{\hat{x}}^2 + C_2)} .
+\end{equation}
+The second numerator term involves the covariance of the two windows, not a product of standard deviations. SSIM was formulated for natural images, and the perceptual interpretation of its value does not transfer to a seismic trace; we use it because the windowed formulation rewards agreement of local waveform structure, which is the property we are interested in, and we report the correlation alongside it so that no conclusion rests on SSIM alone.
+
+Error metrics are the mean squared and mean absolute errors \cite{james2013introduction},
+\begin{equation}
+\mathrm{MSE} = \frac{1}{N} \sum_{i=1}^{N} (x_i - \hat{x}_i)^2,
+\qquad
+\mathrm{MAE} = \frac{1}{N} \sum_{i=1}^{N} \left| x_i - \hat{x}_i \right| ,
+\end{equation}
+the first weighting large errors quadratically and the second linearly. The arithmetic complexity, latency, and memory of each model are reported separately in Section~\ref{subsec:cost}.
+
+\subsection{Results and Analysis}
+\label{subsec:analysis}
+
+\subsubsection{Comprehensive performance comparison}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure2/comprehensive_metrics_comparison.eps}
+\caption{Performance comparison of deep learning–based and wavelet compression methods across compression ratios on STEAD dataset, evaluated using SNR, PSNR, correlation, SSIM, MSE, and MAE.}
+\label{fig:comprehensive-metrics-table}
+\end{figure}
+
+Table~\ref{tab:main-results} and Fig.~\ref{fig:comprehensive-metrics-table} summarize the six methods over the ten ratios. The ordering of the methods changes with the compression ratio, and the change is systematic rather than incidental, so we organize the discussion by regime.
+
+\begin{table}[!t]
+\centering
+\small
+\caption{Reconstruction quality of the three learned models and one wavelet baseline on the held-out evaluation set. SNR is in dB and is the mean of the per-trace values; the bracketed row under each SNR is the standard deviation across traces. CC is the correlation coefficient. The wavelet row is $\text{DB4}$, which is the strongest of the three wavelet filters at ratios of 10 and above; at ratios of 2, 3, and 5 the strongest is $\text{SYM8}$, at 61.35, 47.73, and 36.43~dB respectively.}
+\label{tab:main-results}
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Model & Metric & CR=2 & CR=3 & CR=5 & CR=10 & CR=15 & CR=20 & CR=30 & CR=100 \\
+\midrule
+\multirow{2}{*}{LARA} & SNR & 39.66 & 36.44 & 31.17 & 23.26 & 20.60 & 19.28 & 18.11 & 16.16 \\
+ & $(\sigma)$ & (5.39) & (6.76) & (7.04) & (4.64) & (3.80) & (3.40) & (3.22) & (2.49) \\
+ & CC & 0.9951 & 0.9871 & 0.9589 & 0.8672 & 0.7897 & 0.7272 & 0.6420 & 0.3804 \\
+ & SSIM & 0.9888 & 0.9740 & 0.9358 & 0.8214 & 0.7605 & 0.7263 & 0.6929 & 0.6638 \\
+\addlinespace
+Gen.\ Autoencoder & SNR & 38.15 & 33.92 & 29.47 & 22.74 & 20.20 & 18.94 & 17.61 & 15.87 \\
+ & $(\sigma)$ & (5.29) & (5.89) & (5.92) & (4.51) & (3.74) & (3.32) & (2.84) & (2.40) \\
+ & CC & 0.9939 & 0.9818 & 0.9522 & 0.8497 & 0.7613 & 0.6900 & 0.5724 & 0.3148 \\
+ & SSIM & 0.9843 & 0.9647 & 0.9274 & 0.8062 & 0.7508 & 0.7163 & 0.6879 & 0.6481 \\
+\addlinespace
+AE\_PureConcat & SNR & 34.99 & 32.42 & 22.65 & 22.66 & 20.06 & 16.95 & 17.57 & 15.71 \\
+ & $(\sigma)$ & (3.91) & (4.93) & (5.07) & (5.10) & (3.92) & (2.66) & (2.84) & (2.30) \\
+ & CC & 0.9917 & 0.9797 & 0.8277 & 0.8272 & 0.7355 & 0.5012 & 0.5700 & 0.2975 \\
+ & SSIM & 0.9680 & 0.9498 & 0.8094 & 0.8116 & 0.7533 & 0.6686 & 0.6900 & 0.6360 \\
+\addlinespace
+$\text{Wavelet}_{\text{DB4}}$ & SNR & 60.02 & 45.67 & 35.97 & 27.41 & 23.96 & 21.92 & 19.36 & 3.05 \\
+ & $(\sigma)$ & (14.09) & (9.14) & (7.07) & (4.89) & (4.17) & (3.80) & (3.36) & (0.75) \\
+ & CC & 0.9998 & 0.9980 & 0.9899 & 0.9554 & 0.9128 & 0.8661 & 0.7612 & 0.0482 \\
+ & SSIM & 0.9983 & 0.9921 & 0.9691 & 0.8925 & 0.8293 & 0.7816 & 0.7161 & 0.2652 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{At low compression (CR=2--5), the wavelet methods are the better choice.} At CR=2, $\text{Wavelet}_{\text{SYM8}}$ records SNR=61.35~dB, SSIM=0.9983, and correlation=0.9998, while LARA reaches 39.66~dB, 0.9888, and 0.9951. The advantage is not marginal: LARA trails the best wavelet method by 21.69~dB at CR=2, 11.28~dB at CR=3, and 5.26~dB at CR=5. The reason is structural rather than incidental. A wavelet compressor at CR=2 retains 750 of 1500 coefficients and discards half, and the discarded half is the smallest in amplitude, so the reconstruction is close to exact. The learned codec must pass the whole trace through a 32-channel stem and a bottleneck, and neither the attention nor the residual pathway can preserve detail that the projection has already mixed. Among the learned models LARA is ahead throughout this regime, by 1.51~dB over the Generalized Autoencoder at CR=2 and 2.52~dB at CR=3. AE\_PureConcat behaves differently from both: it loses 9.77~dB between CR=3 and CR=5, where LARA loses 5.28~dB and the Generalized Autoencoder 4.45~dB, and it does not recover the gap at any higher ratio. The drop coincides with the change in its branch configuration rather than with the code length, which shortens monotonically.
+
+\textbf{At medium compression (CR=10--30), the ordering is unchanged.} LARA leads the learned models at every ratio, but by a margin that narrows from 0.52~dB at CR=10 to 0.35~dB at CR=20 before widening slightly to 0.50~dB at CR=30. The wavelet methods still lead overall, by 4.15~dB at CR=10 and 1.25~dB at CR=30. We emphasize that LARA does not peak at any intermediate ratio. Its SNR decreases monotonically across the whole sweep, from 39.66~dB at CR=2 to 16.16~dB at CR=100, and CR=20 lies close to the least favourable part of that range rather than near its best. We consider it important to state this plainly because the behaviour is what the architecture predicts: the code length is the only quantity that varies with the target ratio, so there is no mechanism by which a moderate ratio could be favoured over a mild one.
+
+\textbf{At high compression (CR=50--100), the wavelet methods collapse and LARA leads every method.} At CR=50 the best wavelet baseline, $\text{Wavelet}_{\text{DB4}}$, has fallen to 15.21~dB with a correlation of 0.0693, and the other two families to 9.43 and 6.10~dB with correlations below 0.066. Thresholding discards a fixed number of coefficients, and once that number is small enough the surviving coefficients no longer describe the waveform: the correlation of 0.048 at CR=100 indicates that essentially no linear structure survives, even though the mean squared error remains small. LARA is the only method that degrades gracefully here, retaining a correlation of 0.5050 at CR=50 and 0.3804 at CR=100, and it exceeds the best wavelet method by 1.66, 9.48, and 13.11~dB at CR = 50, 60, and 100.
+
+Across the full sweep from CR=2 to CR=100, LARA loses 23.50~dB of SNR and 0.6147 of correlation, against 56.97~dB and 0.9515 for $\text{Wavelet}_{\text{DB4}}$ and 22.28 and 19.29~dB for the two baseline autoencoders. The learned baselines therefore do not degrade more gracefully than LARA; what distinguishes LARA is that it starts from a better operating point and stays ahead of them at every ratio, by margins that narrow from 2.52~dB to 0.22~dB. Those margins are of the same order as the across-trace dispersion reported in Table~\ref{tab:main-results}, and we do not claim them to be individually significant. Averaged over the ten ratios LARA reaches 23.81~dB against 22.99 and 21.58~dB, and it reaches 13.5~dB per million parameters against 4.8 and 4.3~dB, so its practical advantage is substantially one of efficiency.
+
+The practical conclusion is therefore a regime-dependent recommendation rather than a single optimum. Wavelet thresholding is the appropriate choice up to about CR=30, where it is both more accurate and free of any trained parameters. LARA becomes the better option from about CR=50 onward, where it is the only method tested that retains waveform shape, and it does so with roughly a third of the parameters of the two learned baselines.
+
+\begin{figure}[!t]
+\centering
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=2/LARA.eps}
+\caption{LARA at CR=2}
+\label{fig31:a}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=2/Generalized.eps}
+\caption{Generalized Autoencoder at CR=2}
+\label{fig31:b}
+\end{subfigure}
+
+\vspace{10pt}
+
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=2/AE.eps}
+\caption{AE\_PureConcat at CR=2}
+\label{fig31:c}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=2/Wavelet.eps}
+\caption{Wavelet db4 at CR=2}
+\label{fig31:d}
+\end{subfigure}
+
+\caption{Time-domain and frequency-domain reconstruction quality across compression ratios on STEAD dataset. Example waveforms and their corresponding frequency spectra at CR=2.}
+\label{fig:time-freq-domain-2}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=20/LARA.eps}
+\caption{LARA at CR=20}
+\label{fig34:a}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=20/Generalized.eps}
+\caption{Generalized Autoencoder at CR=20}
+\label{fig34:b}
+\end{subfigure}
+
+\vspace{10pt}
+
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=20/AE.eps}
+\caption{AE\_PureConcat at CR=20}
+\label{fig34:c}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=20/Wavelet.eps}
+\caption{Wavelet db4 at CR=20}
+\label{fig34:d}
+\end{subfigure}
+
+\caption{Time-domain and frequency-domain reconstruction quality across compression ratios on STEAD dataset. Example waveforms and their corresponding frequency spectra at CR=20.}
+\label{fig:time-freq-domain-20}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=100/LARA.eps}
+\caption{LARA at CR=100}
+\label{fig36:a}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=100/Generalized.eps}
+\caption{Generalized Autoencoder at CR=100}
+\label{fig36:b}
+\end{subfigure}
+
+\vspace{10pt}
+
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=100/AE.eps}
+\caption{AE\_PureConcat at CR=100}
+\label{fig36:c}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure3/CR=100/Wavelet.eps}
+\caption{Wavelet db4 at CR=100}
+\label{fig36:d}
+\end{subfigure}
+
+\caption{Time-domain and frequency-domain reconstruction quality across compression ratios on STEAD dataset. Example waveforms and their corresponding frequency spectra at CR=100.}
+\label{fig:time-freq-domain-100}
+\end{figure}
+
+\subsubsection{Signal Reconstruction Analysis}
+
+To assess compression fidelity, reconstructed signals are examined in both the time and the frequency domain. In the time domain the original and reconstructed waveforms are plotted together so that phase arrivals, amplitude variation, and overall morphology can be compared directly, since these are the properties on which phase picking and event characterization depend. In the frequency domain we plot the magnitude spectrum on a logarithmic scale, which shows whether the content in a given band has been retained; this matters because particular frequency ranges carry information about the source mechanism, the propagation path, and the site response.
+
+Figures~\ref{fig:time-freq-domain-2} through~\ref{fig:time-freq-domain-100} show these two views for four methods at three ratios. We describe them in the order the ratios appear, and we note where the images agree with the quantitative tables and where they do not.
+
+\textbf{At CR=2}, all four methods reconstruct the trace recognizably, and the differences between them are small enough that they are best read against Table~\ref{tab:main-results} rather than from the plots. The wavelet compressor is visibly closest to the original, consistent with its correlation of 0.9998 against 0.9951 for LARA. LARA recovers the arrival times and the overall envelope, with a small broadband elevation in the later part of the trace that the other two learned models show to a greater degree. AE\_PureConcat shows the most pronounced high-frequency attenuation of the three learned models, which is consistent with its correlation of 0.9917 and its 4.16~dB deficit against LARA at this ratio.
+
+\textbf{At CR=20}, the learned models have separated. LARA retains the arrival structure and a broad spectral envelope, and its correlation of 0.727 remains well above the 0.501 of AE\_PureConcat. The Generalized Autoencoder is intermediate at 0.690, and its reconstruction shows progressive high-frequency roll-off. The wavelet compressor still leads quantitatively at this ratio, with a correlation of 0.866, and the time-domain traces show the ringing that thresholding introduces where coefficients have been discarded.
+
+\textbf{At CR=100}, the separation is unambiguous. LARA still resolves the principal arrivals and retains a correlation of 0.380, and the Generalized Autoencoder and AE\_PureConcat retain 0.315 and 0.298, so all three learned models preserve some structure at this ratio. The wavelet compressor does not: its correlation falls to 0.048, and the corresponding spectrum shows the high-frequency content removed and spurious low-frequency energy appearing, which is the aliasing signature of reconstructing from a set of coefficients that no longer determines the waveform. This is the clearest qualitative illustration of the crossover reported in Section~\ref{subsec:analysis}, and it is a property of the method rather than of a particular trace.
+
+\subsubsection{Model Parameter Analysis}
+
+Table~\ref{tab:main-results} already suggests that the three learned models differ as much in cost as in accuracy, so we examine the parameter count directly. Figure~\ref{fig:parameter-scaling} plots the total number of trainable weights and biases against the compression ratio on a logarithmic vertical axis, which is necessary because the counts span 0.38 to 19.13 million, a range of fifty, and on a linear axis every ratio above 30 would collapse into the bottom few per cent of the plot. The three wavelet methods have no learnable parameters and are omitted for that reason.
+
+The three learned models behave differently, and the ordering changes twice. Up to CR=20 LARA is by far the smallest, holding 4.73 million parameters at CR=2 against 18.02 and 19.13 million for the Generalized Autoencoder and AE\_PureConcat, a factor of 3.81 and 4.04 fewer, and the advantage narrows but persists to 1.59 and 1.67 at CR=20. This is the direct consequence of the filled funnel described in Section~\ref{subsec:architecture}: because the pooled width is held at 188 or 94 samples rather than contracted to the code length, the two projection matrices that dominate the count stay small even when the code is long, so the model does not pay for the low ratios with a large architecture. The step in the LARA curve between CR=5 and CR=10, from 2.03 to 2.05 million, marks the point at which the funnel is engaged, and it is a small discontinuity rather than a growth.
+
+At CR=30 the ordering changes for the first time. AE\_PureConcat becomes the smallest model at 0.68 million against 0.85 for LARA and 1.22 for the Generalized Autoencoder, because its branch configuration at this ratio uses two branches of eight feature maps rather than sixteen. From CR=50 onward the Generalized Autoencoder is the smallest, at 0.74, 0.62, and 0.38 million parameters for CR = 50, 60, and 100. LARA is therefore the most economical of the three at CR $\leq$ 20 and the least economical at CR $\geq$ 50, where it requires 1.79 and 1.77 times the parameters of the Generalized Autoencoder and AE\_PureConcat at CR=100.
+
+We regard this as a fair characterization of the trade-off rather than a defect, and it points to the regime-dependent recommendation made above. LARA's parameter economy and its accuracy lead coincide in the low-to-moderate range, where the two wavelet families are not yet competitive and a learned codec is being asked to do better than thresholding at equal ratio. Above CR=50 the wavelets have failed, so the comparison that matters is against the other learned models, and there LARA wins on accuracy by 0.22 to 0.29~dB at a cost of roughly 1.8 times the parameters. A deployment that is constrained by memory or transmission budget for the model itself can prefer the smaller baseline; a deployment constrained by waveform fidelity at extreme compression cannot.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure4/Models_Parameter_Count_vs_CR.eps}
+\caption{Parameter count of the three learned models against compression ratio, on a logarithmic vertical axis. LARA is the smallest model up to CR=20; AE\_PureConcat is smallest at CR=30 and the Generalized Autoencoder from CR=50 onward. The three wavelet methods have no learnable parameters and are not shown.}
+\label{fig:parameter-scaling}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure5/ablation_metrics_comparison.png}
+\caption{Performance impact of network capacity and attention mechanisms on STEAD dataset versus compression ratio evaluated using SNR, PSNR, correlation coefficient, SSIM, MSE, and MAE.}
+\label{fig:ablation-study}
+\end{figure}
+
+\subsection{Ablation Study and Analysis}
+\label{subsec:component-ablation}
+
+Five arms were trained under a single uniform budget, with the data, the split, the hyper-parameters, the initial weights, and the compression-ratio grid held identical and only the architecture varying. Two of the arms are component removals, in which the channel attention block or the residual connection is deleted from an otherwise unchanged network, and two are capacity scalings. The arms are a full-capacity reference with 64-channel base width and a 32-channel bottleneck, the same network without attention, the same network without residual connections, a light scaling at 32-channel base width and 16-channel bottleneck, and a heavy scaling at 128-channel base width and 64-channel bottleneck.
+
+Two features of this list must be stated before the results are interpreted, because both affect how the arms relate to the model proposed in this paper. First, the light arm is not a distinct baseline: it is LARA itself, and its parameter count is identical to that of the model reported in Section~\ref{subsec:analysis} at every one of the ten ratios. It is labelled separately in the figures only because the ablation was run as a separate experiment. Second, the reference arm is a considerably larger network than LARA, holding 9,494,227 parameters at CR=2 against 4,733,755, so the reference is not a like-for-like competitor and differences against it measure capacity as well as design. We retain the reference because it is the arm from which the two components were removed, and a component ablation requires an unablated starting point, but we do not present it as the state of the art.
+
+\begin{table}[!t]
+\centering
+\small
+\caption{Reconstruction SNR in dB of the five ablation arms, with the parameter count and the mean wall-clock training time per run. LARA (light) attains the highest SNR at eight of the ten ratios and is never worse than second.}
+\label{tab:component-ablation}
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Arm & CR=2 & CR=5 & CR=10 & CR=20 & CR=30 & CR=50 & CR=100 & Params & Time \\
+\midrule
+LARA (light)         & \textbf{40.23} & \textbf{31.01} & \textbf{23.32} & \textbf{19.34} & \textbf{18.14} & 16.87 & \textbf{16.03} & 0.68--4.73 & 904 \\
+Heavy capacity       & 39.22 & 30.56 & 22.62 & 19.03 & 17.71 & \textbf{16.93} & 15.00 & 2.22--19.90 & 1182 \\
+Reference (full)     & 36.80 & 30.56 & 23.10 & 19.09 & 17.59 & 16.69 & 15.84 & 0.64--9.49 & 1292 \\
+No attention         & 35.70 & 30.11 & 22.80 & 19.32 & 17.56 & 16.70 & 15.85 & 0.61--9.47 & 1249 \\
+Plain convolution    & 36.64 & 30.21 & 23.16 & 19.05 & 17.60 & 16.82 & 15.82 & 0.60--9.45 & 1325 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The outcome, given in Table~\ref{tab:component-ablation} and Fig.~\ref{fig:ablation-study}, is that LARA is the strongest of the five arms on every aggregate measure. It has the highest mean SNR, 23.86~dB against 23.25 for both the reference and the heavy arm, 23.15 for plain convolution, and 22.95 without attention. It also has the highest mean SSIM, 0.7899, the lowest mean squared error, $3.31\times10^{-3}$, and the shortest mean training time, 904~s per run against 1182 to 1325~s for the other four, a factor of 1.43 against the reference. It attains the highest SNR at eight of the ten ratios and is never worse than second at the remaining two, where it trails plain convolution by 0.05~dB at CR=15 and the heavy arm by 0.06~dB at CR=50, both of which are smaller than the across-trace dispersion of Table~\ref{tab:main-results}. The light arm also holds 2.01 times fewer parameters than the reference at CR=2 and 2.77 times fewer at CR=100.
+
+The two component removals behave as one would expect only in part of the range, and this is the most informative outcome of the study. At low compression the components are worth having: removing the attention block costs 1.10~dB at CR=2 and 1.26~dB at CR=3, and 0.45~dB at CR=5, while removing the residual connection costs 0.16~dB at CR=2 and 0.76~dB at CR=3. Above CR=10 the picture changes, and the differences fall below the level at which we would consider them resolved. The attention deficit, relative to the reference arm, is $-1.10$, $-1.26$, $-0.45$, $-0.30$, $+0.02$, $+0.23$, $-0.03$, $+0.02$, $-0.17$, and $+0.00$~dB for CR = 2 through 100, so it vanishes at CR=15 and reverses at CR=20. The spread across all five arms is 4.53~dB at CR=2 but only 0.71, 0.22, 0.32, 0.58, 0.24, 0.22, and 1.03~dB at the seven higher ratios.
+
+We draw two conclusions, and we state the second because it is not what the first might suggest. The first is that the attention block and the residual connection both contribute to reconstruction quality where the code is long enough for the detail they preserve to matter, and that they are close to irrelevant once the code is short. The second is that neither component alone accounts for the performance of LARA. At CR $\geq$ 10 all five arms lie within 1.03~dB of one another while LARA remains the best, so its advantage must come from the architecture as a whole, namely the filled funnel, the six-level pyramid decoder, and the two-layer refinement head, rather than from the presence of any single block. The ablation therefore supports the design in aggregate; it does not isolate which of its elements is responsible, and a component-level attribution would require further arms that vary the funnel and the decoder independently.
+
+A final property of the design is worth recording because it affects the interpretation of the parameter results in Section~\ref{subsec:analysis}. The filled funnel is engaged only for $\mathrm{CR} \geq 10$; at CR = 2, 3, and 5 the bottleneck width is 16 and the pooled length follows the code length, so three of the ten points describe a slightly different network from the other seven. This is visible as the small step in the LARA parameter count between CR=5 and CR=10, and it is the reason the SNR curve for this arm steps down more sharply between those two ratios than the other arms do.
+
+\subsection{Loss-Function Ablation}
+\label{subsec:loss-ablation}
+
+The reconstruction objective used throughout this study is the mean squared error, which constrains the reconstruction in the time domain only. The waveform fidelity claimed in this paper is, however, attributed to the preservation of P- and S-wave arrivals, phase, and spectral content, all of which are frequency-domain quantities. We therefore conducted a controlled comparison of the mean squared error against six objectives that treat these quantities directly.
+
+The comparison uses the light-capacity architecture that preceded LARA. It retains the 32-channel stem, the channel attention block, and the residual blocks of the proposed model, but differs in the bottleneck, the decoder, and the output head: it pools to $T = \min(z, L)$ rather than $T = L$, holds the bottleneck width at 16 channels, upsamples the decoder linearly at a constant 16-channel width, and reconstructs through a single convolution. LARA instead fills the funnel, ramps the decoder to 64 channels across six levels, and refines the output in two layers, so that the parameter counts of the two models differ by 1.02$\times$ at CR=2 and 3.80$\times$ at CR=20.
+
+Since the architecture is identical across all seven arms and only the training loss varies, each arm isolates the effect of a single objective. The experiment consequently bounds what a different loss can achieve on a fixed network rather than establishing the best attainable loss for LARA itself.
+
+The pool comprised 2,000 STEAD traces of magnitude greater than 3 recorded within 60~km, each truncated to 1,500 samples and partitioned 1,600/200/200 at seed 42, and all seven arms were evaluated on the same 200 held-out traces. The random seed was re-applied before every run so that the seven arms at a given compression ratio started from identical weights, and all 42 runs trained from scratch under the recipe adopted for the main study: Adam at $2\times10^{-4}$, weight decay $10^{-5}$, gradient clipping at 1.0, \texttt{ReduceLROnPlateau} with factor 0.5 and patience 5, a 120-epoch cap, and early stopping at patience 8.
+
+Five families of auxiliary term were implemented. A multi-resolution magnitude short-time Fourier transform ($n_{\mathrm{fft}}$ 128, 256, and 512; hop $n/4$; Hann window) contributes a spectral term together with a log-magnitude term, a three-level db4 Mallat decomposition contributes a wavelet-coefficient term, and a phase-derivative term compares frame-to-frame unit-phasor differences. Two further terms act on the waveform directly: normalized cross-correlation supplies a shape term, and STA/LTA weighting (STA 20 samples, LTA 100 samples) emphasises high-energy samples. The phase and arrival weights were scaled with compression ratio, whereas the STFT and wavelet weights were held fixed.
+
+\begin{table}[!t]
+\centering
+\small
+\caption{Reconstruction SNR in dB of seven training objectives on the light-capacity architecture. Each arm was trained from scratch and evaluated on a common set of 200 held-out traces. The column $\Delta$SNR is the unweighted mean difference from the MSE control at the same compression ratio, and the final column counts the ratios at which an arm exceeds the control.}
+\label{tab:loss-ablation}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+Training objective & CR=2 & CR=5 & CR=10 & CR=20 & CR=50 & CR=100 & $\Delta$SNR & Won \\
+\midrule
+MSE (control)         & 24.09 & 24.84 & 20.64 & 18.07 & 15.86 & 15.02 & --- & --- \\
+STFT                 & 14.06 & 13.05 & 13.09 & 12.92 & 12.88 & 13.02 & $-6.58$ & 0/6 \\
+STFT\_Arrival        & 18.97 & 17.47 & 13.88 & 13.01 & 13.02 & 13.21 & $-4.83$ & 0/6 \\
+STFT\_Phase          & 15.78 & 13.29 & 13.04 & 12.97 & 14.20 & 14.59 & $-5.78$ & 0/6 \\
+STFT\_Wavelet        & 21.30 & 19.40 & 13.57 & 13.09 & 13.02 & 13.12 & $-4.17$ & 0/6 \\
+STFT\_Phase\_Arrival & 18.31 & 14.14 & 13.08 & 13.05 & 14.45 & 14.65 & $-5.14$ & 0/6 \\
+NCC\_Arrival         & 25.45 & 24.62 & 21.27 & 18.02 & 14.85 & 14.96 & $+0.11$ & 2/6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+None of the five spectral, phase, or wavelet objectives outperformed the mean squared error, and every one of them performed worse at every compression ratio tested. The deficits ranged from 0.38~dB (\texttt{STFT\_Phase\_Arrival} at CR=100) to 11.79~dB (\texttt{STFT} at CR=5) and averaged 5.30~dB across all thirty comparisons.
+
+The degradation in waveform correlation is more severe than the SNR figures alone suggest. At CR=20 the five spectral-domain arms reach correlation coefficients between 0.006 and 0.046, against 0.658 for MSE, and at CR=50 all five lie within 0.004 of zero while MSE retains 0.370. A magnitude-domain objective constrains the spectrum without constraining temporal alignment, and the resulting latent is accordingly phase-inconsistent with the target.
+
+The deficit is also not uniform across the compression range. Between CR=2 and CR=5 the spectral-domain arms lose between 2.8 and 11.8~dB, whereas between CR=50 and CR=100 the same losses narrow to between 0.4 and 3.0~dB, which suggests that a very small latent leaves too little freedom for the auxiliary terms to diverge substantially from the waveform objective.
+
+Normalized cross-correlation with arrival weighting was the only arm to remain competitive, gaining 1.36~dB at CR=2 and 0.63~dB at CR=10 while losing at the remaining four ratios, for a mean change of $+0.108$~dB and a median of $-0.055$~dB. Both values lie within the across-trace dispersion reported in Section~\ref{subsec:analysis}, and we do not therefore regard its advantage as established.
+
+On this evidence we retain the mean squared error as the reconstruction objective. No auxiliary formulation improved on it, and the frequency-domain and phase-aware variants reduced waveform fidelity rather than preserving it.
+
+\textbf{Omitted diagnostics.} Two diagnostics computed during the original analysis are not reported here. First-motion polarity match cannot be evaluated under this preprocessing: each trace is scaled to $[0,1]$, so no input sample is negative, and the decoder ends in a sigmoid, so no output sample is negative either, which makes the first-motion polarity positive in both the reference and the reconstruction and reduces the metric to a constant 1.0 on every trace. Pick error is omitted for a related reason, in that it was computed as the index of the largest STA/LTA ratio over the whole window without a threshold crossing or a pre-trigger window, and it returned between 38 and 384 samples for the same MSE control as the compression ratio increased, which reflects the largest energy fluctuation of a smooth reconstructed baseline rather than an arrival-time error. PSNR is reported, but it carries little independent information here, because its data range is fixed at 1.0 and the rescaled traces have nearly constant root-mean-square amplitude, leaving the two metrics separated by a constant offset.
+
+\textbf{Limitations.} Several limitations should be stated. The network examined is the light-capacity predecessor of LARA rather than LARA itself, so the experiment bounds the effect of the objective on a fixed architecture and does not establish the best loss attainable for the proposed model. The rule that scales the phase and arrival weights with compression ratio was adopted without being ablated in its own right.
+
+Two properties of the implementation further qualify the phase-aware arms. The phase-derivative term is blind to a polarity inversion, because a global flip introduces a constant phase offset of $\pi$ that cancels exactly in the frame-to-frame difference, and these arms therefore do not test polarity preservation despite their names. The arrival-weight floor, meanwhile, rises to 3.0 at CR=100, and since the weight is the floor plus a normalised ratio, a higher floor flattens the contrast between quiet and energetic samples rather than sharpening it, reducing that contrast from 2:1 to 4:3.
+
+Finally, the pool of 2,000 traces above magnitude 3 is smaller and more restricted than the 25,091 traces above magnitude 2.5 used in Section~\ref{subsec:analysis}, which accounts for the lower absolute SNR values reported here.
+
+\subsection{Effective Bit Rate}
+\label{subsec:bitrate}
+
+The compression ratio used above counts the values in the latent code and says nothing about the number of bits those values occupy. Because the code is a float32 vector, the quantity that has actually been measured so far is a storage ratio: one 1500-sample source trace occupies 48,000 bits, or 32.0 bits per sample, and the code occupies 32.0 bits per sample divided by the ratio, with no coding gain whatsoever. We therefore report the end-to-end coded size, which requires three further steps. The code is quantized on a per-dimension uniform mid-tread quantizer at a bit depth chosen per ratio; the quantized symbols are compressed with an adaptive binary arithmetic coder driven only by the symbols of the trace being coded, so that no frequency table has to be transmitted; and the range of each quantizer dimension is calibrated on the training split alone and sent once per model. Every coded trace is decoded and compared against the quantized symbols before its rate is reported, so no figure in this section describes bits a decoder could not recover.
+
+\begin{table}[!t]
+\centering
+\small
+\caption{Effective size of the LARA code. The quantizer depth is the cheapest depth that keeps the reconstruction within 0.5~dB of the unquantized SNR. Coded size is the steady-state rate in bits per sample, the model and range side information excluded.}
+\label{tab:bitrate}
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Ratio & Code & Uncoded BPS & Coded BPS & Depth & Gain & Coder BPS & Entropy bound & Excess \\
+\midrule
+2   & 750 & 16.000 & 3.6851 & 8 & 4.34 & 5527.7 & 5013.0 & 10.3\% \\
+3   & 500 & 10.667 & 2.5206 & 8 & 4.23 & 3781.0 & 3351.2 & 12.8\% \\
+5   & 300 & 6.400 & 1.5463 & 8 & 4.14 & 2319.5 & 1975.8 & 17.4\% \\
+10  & 150 & 3.200 & 0.4470 & 5 & 7.16 & 670.6 & 585.1 & 14.6\% \\
+15  & 100 & 2.133 & 0.3090 & 5 & 6.90 & 463.5 & 387.4 & 19.6\% \\
+20  & 75  & 1.600 & 0.1769 & 4 & 9.04 & 265.3 & 214.2 & 23.9\% \\
+30  & 50  & 1.067 & 0.1260 & 4 & 8.47 & 189.0 & 142.9 & 32.2\% \\
+50  & 30  & 0.640 & 0.0812 & 4 & 7.88 & 121.8 & 77.2 & 57.8\% \\
+60  & 25  & 0.533 & 0.0660 & 4 & 8.08 & 99.0 & 63.4 & 56.1\% \\
+100 & 15  & 0.320 & 0.0428 & 4 & 7.48 & 64.2 & 33.8 & 89.8\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:bitrate} gives the result. Reducing the code from 32 bits per value to 4 to 8 bits and then entropy coding it makes the transmitted trace between 4.14 and 9.04 times smaller than the uncoded float32 latent, for a reconstruction that is at most 0.41~dB and on average 0.27~dB below the unquantized SNR. At a ratio of 20 this is 1.600 bits per sample uncoded against 0.177 bits per sample coded, and at a ratio of 100 it is 0.320 against 0.043. Figures~\ref{fig:bps-rd} and~\ref{fig:bps-cr} show the full rate--distortion families for all three learned models and the coded rate against the ratio.
+
+The decomposition of that gain is worth stating plainly, because it is not where a reader might expect. Almost all of it comes from the reduction in quantizer depth, and very little from the entropy coder. At the depths selected in Table~\ref{tab:bitrate}, the arithmetic coder changes the rate by between $-6\%$ and $+13\%$ relative to simply writing the quantized symbols at a fixed width, and at ratios of 50, 60, and 100 it is marginally worse than fixed-width coding, costing 1.5\%, 1.0\%, and 6.9\% more bits respectively. The coder also sits between 10.3\% and 89.8\% above the zeroth-order entropy bound, and the excess grows as the code shortens, because an adaptive model that must be learned from the trace itself has a startup cost that is amortized over fewer symbols; by a ratio of 100 the 15-value code is too short for the model to pay for itself. We report this because the framing of a large gain attributable to entropy coding is common and, in this case, incorrect: the honest statement is that the latent is highly compressible by simple bit-depth reduction, and that context modelling adds little at these code lengths.
+
+The figures above exclude the decoder, and for a small number of traces that exclusion dominates everything else. The LARA model at a ratio of 20 holds 1,146,536 parameters, or 4.6~MB, whereas a single coded trace occupies 265 bits, so the model is 140,000 times larger than one trace. Amortizing the model over $N$ traces gives a total cost per sample of 219.0 bits at $N = 200$, 44.2 at $N = 1{,}000$, 4.82 at $N = 10^{4}$, 0.88 at $N = 10^{5}$, and 0.49 at $N = 10^{6}$, at which point the model accounts for 99.6\%, 99.3\%, 84.7\%, 35.6\%, and 5.2\% of the total respectively. Every bit-rate figure in this paper is therefore quoted without the model, and the ratio at which the model ceases to dominate is of the order of a hundred thousand traces.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure8/bps_rd_curves.png}
+\caption{Rate--distortion curves for the three learned models, reconstructed SNR against the coded size of the latent. The vertical axis is unquantized SNR and the horizontal axis is the steady-state coded bits per sample, with the model excluded.}
+\label{fig:bps-rd}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure8/bps_vs_cr.png}
+\caption{Coded size of the latent against compression ratio for the three learned models, with the uncoded float32 rate $32/\mathrm{CR}$ for reference.}
+\label{fig:bps-cr}
+\end{figure}
+
+Two further points qualify the comparison. The coded size of the wavelet baselines was not measured, so the rate--distortion comparison above is restricted to the three learned models and the wavelet results in Section~\ref{subsec:analysis} are not rate-matched; sparse wavelet coefficients compress well, and a reader should not infer that LARA is cheaper at a given distortion. And the coded rate does not favour LARA at the highest ratios: at a ratio of 60 the Generalized Autoencoder reaches the same distortion at 0.048 bits per sample against 0.066 for LARA, because it quantizes one level finer on a shorter effective code. LARA's advantage in this study is reconstruction SNR, not coded rate, at ratios above roughly 30. What the fixed-length code does buy is bounded decoding: a trace is recovered in one pass with no search, whereas a thresholded wavelet code is variable-length and requires the positions and signs of the retained coefficients to be coded alongside their values.
+
+\subsection{Computational Cost}
+\label{subsec:cost}
+
+The cost of the codec matters as much as its accuracy, since a scheme that cannot be applied in near real time is of limited operational value. We report the arithmetic complexity, the per-trace latency on CPU and GPU hardware, the throughput, and the size of the stored model. The arithmetic count treats a multiply and accumulate as two operations and counts matrix products and convolutions but not elementwise operations, so the figures are a lower bound on the work performed. For LARA the encoder requires between 49.3 and 52.2 million operations per trace at ratios below 30 and 110.2 million above it, the increase being the conditional fourth stage, and the decoder requires between 185.0 and 212.2 million throughout. The decoder is therefore three to four times the cost of the encoder, which is the opposite of the usual arrangement and follows from the six-level pyramid, in which each level operates on a longer signal than the last.
+
+Latency was measured on two platforms that differ in more than the accelerator, so we separate the two effects as far as the data allow. The CPU measurements were taken on an Intel Core Ultra 7 155H with 22 logical cores, and the GPU measurements on an NVIDIA GeForce RTX 4080 SUPER driven by an AMD Ryzen 7 7800X3D host; the arithmetic coder is implemented in software on the host in both cases and never touches the device, which makes it a clean indicator of the host difference.
+
+On the CPU, with subnormal values flushed, LARA requires between 2.8 and 6.6~ms per trace to encode and 0.6 to 5.1~ms to decode, depending on the ratio and on whether one or all threads are used, which is between 150 and 400 traces per second. The same model on the GPU requires 1.11~ms to encode and 0.85~ms to decode at a batch size of one, and 0.036 and 0.027~ms respectively at a batch size of 32, corresponding to roughly 16,000 traces per second.
+
+Two measurement effects are large enough that reporting a single number would mislead. The first is that the trained weights themselves are numerically degenerate at high ratios. Between 23.1\% and 52.9\% of the float32 parameters of the trained LARA models at ratios of 50, 60, and 100 lie in the subnormal range, so that on a processor without flush-to-zero every operation on them incurs a microcode assist. The consequence is severe and specific: at a ratio of 50 the single-threaded CPU encoder takes 2.78~ms per trace with subnormals flushed and 1328.60~ms without, a factor of 478, as shown in Fig.~\ref{fig:subnormal}. Neither baseline is affected, since both have an exactly zero subnormal fraction at every ratio, and the effect appears only in LARA. This is a property of the weights that training produced rather than of the architecture, and it is a practical hazard for any deployment of the released checkpoints on a CPU without flush-to-zero; it does not affect the accuracy results, which were obtained on a GPU where the arithmetic is not subject to this penalty.
+
+The second effect is that the arithmetic coder, not the network, limits throughput. A full encode and decode round trip of the latent costs between 0.12 and 6.93~ms per trace on the host, against 0.063 to 0.075~ms for the network itself at a batch size of 32, so for a batched pipeline the coder is between 1.6 and 110 times the cost of the encoder and decoder combined, and it remains the larger term at every ratio tested. Two consequences follow for deployment. The first is that the codec as measured here is not GPU-bound, and a faster network would not help. The second is that the coder's cost is highest exactly where the code is longest, at the low ratios where Section~\ref{subsec:analysis} finds the learned models to be of limited value in any case.
+
+We were not able to record peak inference memory, so we report only the stored model size, which ranges from 18.1~MB at a ratio of 2 to 2.7~MB at a ratio of 100 for LARA, against 72.1 and 3.0~MB for the Generalized Autoencoder.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.62\textwidth]{Figures/Figure9/subnormal_fraction.png}
+\caption{Fraction of stored float32 parameters that lie in the subnormal range, by compression ratio. The effect is specific to LARA and rises sharply above CR=30.}
+\label{fig:subnormal}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.62\textwidth]{Figures/Figure9/bottleneck_vs_cr.png}
+\caption{Per-trace cost of the arithmetic coder against the cost of the network at a batch size of 32 on the GPU, showing the coder to be the larger term at every compression ratio.}
+\label{fig:bottleneck}
+\end{figure}
+
+\subsection{Generalization Assessment on External Datasets}
+\label{subsec:zero-shot}
+
+The results above show that LARA performs well on data drawn from the same distribution as its training set. A more demanding test is whether the model still performs well on data it has never seen. To check this, a zero-shot evaluation was performed: every model --- LARA, the two baseline autoencoders, and the three wavelet compressors --- was trained only on STEAD and then applied directly, with no fine-tuning or retraining, to two independent, geographically  distinct regional datasets. This setup mimics a realistic deployment scenario, in which a compression model trained on one seismic network is asked to compress waveforms from a different region without access to local training examples. Strong performance under these conditions would indicate that the model has learned waveform representations that generalize beyond its training distribution, rather than representations tuned narrowly to STEAD.
+
+\subsubsection{External Datasets Description}
+
+\textbf{Texas Earthquake Dataset (TXED)}---The TXED dataset \cite{txed} comprises seismic recordings from induced and tectonic earthquakes in the state of Texas, United States. This dataset features waveforms with distinct characteristics compared to the STEAD training data, including different noise conditions, propagation path effects, and source mechanisms associated with induced seismicity in sedimentary basins.
+
+\textbf{INSTANCE Dataset}---The INSTANCE dataset \cite{michelini2021instance} provides seismic recordings from the Italian region, a tectonically active area characterized by complex fault systems and heterogeneous geological structures. The dataset spans a wide range of earthquake magnitudes and source depths, with waveforms shaped by the attenuation and propagation properties typical of the Mediterranean region.
+
+Both datasets were preprocessed following the same protocol applied to the STEAD training data: waveforms were windowed to 1,500 samples, normalized to the $[0,1]$ range, and only vertical-component (Z-channel) recordings were used. For this evaluation, 10,000 waveforms were randomly selected from each dataset and compressed and reconstructed using the STEAD-trained models, with no additional training performed on TXED or INSTANCE data. 
+
+\subsubsection{Quantitative Generalization Results}
+
+Figures~\ref{fig:zero-shot-texas} and~\ref{fig:zero-shot-instance} compare all six compression methods on TXED and INSTANCE across compression ratios from 2:1 to 100:1. Tables~\ref{tab:zero-shot-texas} and~\ref{tab:zero-shot-instance} summarize the corresponding SNR, correlation, and SSIM values at representative compression ratios, with LARA's superior results highlighted in bold.
+
+\textbf{Performance on the Texas Earthquake Dataset:} At low compression (CR=2--5), LARA reaches an SNR of 16.91~dB at CR=2 and 19.10~dB at CR=5. These values are lower than the roughly 32~dB LARA reaches on STEAD at CR=2, and they also trail the wavelet methods, which remain close to lossless on TXED (Wavelet\_DB4: 34.40~dB at CR=2, 24.57~dB at CR=5). At CR=10, LARA (SNR=17.86~dB, correlation=0.831) already exceeds both learned baselines --- the GeneralizedAutoencoder (16.09~dB, 0.728) and AE\_PureConcat (14.86~dB, 0.613) --- but still trails Wavelet\_DB4 (20.38~dB, 0.908) by a narrow margin. This is the last compression ratio at which a wavelet method leads LARA on either external dataset.
+
+From CR=20 onward, LARA takes a clear and growing lead. At CR=20 --- the optimal operating point identified in our STEAD experiments --- LARA reaches SNR=25.24~dB and correlation=0.971, exceeding Wavelet\_DB4 (17.23~dB, 0.799) by 8.01~dB and 17.2 percentage points in correlation, and exceeding the GeneralizedAutoencoder (15.06~dB, 0.636) by 10.18~dB and 33.5 percentage points. At CR=50, LARA (18.08~dB, 0.839) leads the strongest remaining baseline, the GeneralizedAutoencoder (14.27~dB, 0.534), by 3.81~dB and 30.5 percentage points, while the wavelet families collapse: Wavelet\_COIF3 and Wavelet\_SYM8 fall to single-digit SNR (6.58~dB and 7.11~dB) with correlations below 0.15, and even the more robust Wavelet\_DB4 drops to correlation=0.369. At CR=100 , LARA (16.69~dB, 0.770) still exceeds the GeneralizedAutoencoder (13.91~dB, 0.471) by 2.79~dB and 29.9 percentage points, while all three wavelet families have effectively failed, with SNR below 3~dB and correlation below 0.11.
+
+\textbf{Performance on the INSTANCE Dataset:} LARA achieves an SNR of 20.34~dB and a correlation of 0.890 at CR=2 on INSTANCE, compared with 16.91~dB on TXED at the same compression ratio. At CR=10, LARA (20.30~dB, 0.889) is essentially tied with Wavelet\_DB4 (20.36~dB, 0.890) and clearly ahead of the GeneralizedAutoencoder (17.65~dB, 0.783) and AE\_PureConcat (15.63~dB, 0.620).
+
+At CR=20, LARA (24.88~dB, 0.963) leads the GeneralizedAutoencoder (16.01~dB, 0.659) by 8.87~dB and 30.4 percentage points, and leads AE\_PureConcat (15.73~dB, 0.631) by 9.15~dB and 33.2 percentage points; it also leads Wavelet\_DB4 (17.72~dB, 0.787) by 7.15~dB and 17.6 percentage points. At CR=50, LARA (18.86~dB, 0.841) leads the GeneralizedAutoencoder (14.78~dB, 0.500) by 4.08~dB and 34.1 percentage points, while Wavelet\_COIF3 and Wavelet\_SYM8 fall to single-digit SNR (8.02~dB and 9.11~dB) with correlations below 0.17. At CR=100 , LARA (17.75~dB, 0.789) leads the GeneralizedAutoencoder (14.47~dB, 0.441) by 3.28~dB and 34.8 percentage points, while all three wavelet families fail almost completely, with SNR below 4~dB and correlation below 0.09.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure6/comprehensive_metrics_comparison_Texas.png}
+\caption{Zero-shot performance comparison on the Texas Earthquake Dataset (TXED)}
+\label{fig:zero-shot-texas}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure6/comprehensive_metrics_comparison_Instance.png}
+\caption{Zero-shot performance comparison on the INSTANCE Italian seismic dataset.}
+\label{fig:zero-shot-instance}
+\end{figure}
+
+\begin{table}[!t]
+\centering
+\caption{Zero-shot performance on the Texas Earthquake Dataset (TXED).}
+\label{tab:zero-shot-texas}
+\begin{tabular}{l l c c c c c c}
+\toprule
+\textbf{Metric} & \textbf{Method} & \textbf{CR=2} & \textbf{CR=5} & \textbf{CR=10} & \textbf{CR=20} & \textbf{CR=50} & \textbf{CR=100} \\
+\midrule
+SNR (dB) & {LARA} & {16.91} & {19.10} & {17.86} & \textbf{25.24} & \textbf{18.08} & \textbf{16.69} \\
+ & GeneralizedAutoencoder & 20.51 & 18.16 & 16.09 & 15.06 & 14.27 & 13.91 \\
+ & AE\_PureConcat & 20.27 & 18.11 & 14.86 & 14.89 & 13.87 & 13.56 \\
+ & Wavelet\_DB4 & \textbf{34.40} &\textbf{ 24.57} & \textbf{20.38} & 17.23 & 13.45 & 2.66 \\
+\midrule
+Correlation & {LARA} & {0.793} &{0.875} & {0.831} & \textbf{0.971} & \textbf{0.839} & \textbf{0.770} \\
+ & GeneralizedAutoencoder & 0.911 & 0.842 & 0.728 & 0.636 & 0.534 & 0.471 \\
+ & AE\_PureConcat & 0.906 & 0.839 & 0.613 & 0.617 & 0.464 & 0.398 \\
+ & Wavelet\_DB4 & \textbf{0.997} & \textbf{0.966} & \textbf{0.908} & 0.799 & 0.369 & 0.092 \\
+\midrule
+SSIM & {LARA} & {0.743} & {0.766} & \textbf{0.739} & \textbf{0.939} & \textbf{0.692} & \textbf{0.578} \\
+ & GeneralizedAutoencoder & 0.798 & 0.692 & 0.525 & 0.441 & 0.406 & 0.391 \\
+ & AE\_PureConcat & 0.796 & 0.684 & 0.443 & 0.443 & 0.391 & 0.381 \\
+ & Wavelet\_DB4 & \textbf{0.981} & \textbf{0.860} & {0.691} & 0.539 & 0.379 & 0.165 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[!t]
+\centering
+\caption{Zero-shot performance on the INSTANCE dataset.}
+\label{tab:zero-shot-instance}
+\begin{tabular}{l l c c c c c c}
+\toprule
+\textbf{Metric} & \textbf{Method} & \textbf{CR=2} & \textbf{CR=5} & \textbf{CR=10} & \textbf{CR=20} & \textbf{CR=50} & \textbf{CR=100} \\
+\midrule
+SNR (dB) & {LARA} & {20.34} & {20.59} & {20.30} & \textbf{24.88} & \textbf{18.86} & \textbf{17.75} \\
+ & GeneralizedAutoencoder & 21.80 & 19.51 & 17.65 & 16.01 & 14.78 & 14.47 \\
+ & AE\_PureConcat & 21.78 & 19.80 & 15.63 & 15.73 & 14.49 & 14.36 \\
+ & Wavelet\_DB4 & \textbf{33.21} & \textbf{23.95} & \textbf{20.36} & 17.72 & 14.30 & 3.08 \\
+\midrule
+Correlation & {LARA} & {0.890} & {0.896} &  {0.889} & \textbf{0.963} & \textbf{0.841} & \textbf{0.789} \\
+ & GeneralizedAutoencoder & 0.923 & 0.865 & 0.783 & 0.659 & 0.500 & 0.441 \\
+ & AE\_PureConcat & 0.922 & 0.874 & 0.620 & 0.631 & 0.445 & 0.419 \\
+ & Wavelet\_DB4 &\textbf {0.995} & \textbf {0.954} & \textbf {0.890} & 0.787 & 0.405 & 0.081 \\ 
+\midrule
+SSIM & {LARA} & {0.702} & {0.758} & \textbf{0.711} & \textbf{0.918} & \textbf{0.650} & \textbf{0.572} \\
+ & GeneralizedAutoencoder & 0.791 & 0.665 & 0.536 & 0.439 & 0.393 & 0.382 \\
+ & AE\_PureConcat & 0.792 & 0.675 & 0.433 & 0.441 & 0.383 & 0.378 \\
+ & Wavelet\_DB4 & \textbf {0.977} & \textbf {0.837} &  {0.667} & 0.521 & 0.378 & 0.171 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Comparative Analysis Across Datasets}
+
+Three observations stand out from the zero-shot results.
+
+\textbf{LARA generalizes well once compression exceeds roughly 5:1.} LARA trails both learned baselines only at CR=2 on either external dataset (e.g., on Texas: 16.91~dB/0.793 versus 20.51~dB/0.911 for the GeneralizedAutoencoder); from CR=5 onward it overtakes the GeneralizedAutoencoder and AE\_PureConcat at every ratio tested on both datasets, and it overtakes the wavelet methods once CR reaches about 15--20:1, after briefly trailing Wavelet\_DB4 at CR=10. From CR=50 onward, LARA leads the strongest remaining baseline by roughly 30--35 percentage points in correlation on both datasets. At CR=50, Wavelet\_SYM8 and Wavelet\_COIF3 --- which had matched or exceeded LARA at low compression --- have already fallen below a correlation of 0.15, while Wavelet\_DB4 remains substantially higher (0.369 on Texas, 0.405 on INSTANCE); by CR=100, all three wavelet families have collapsed to a correlation below 0.11.
+
+\textbf{Wavelet degradation is abrupt rather than gradual.} The wavelet families remain competitive, and even superior to LARA, through roughly CR=10--15, then lose most of their reconstruction quality within a narrow CR range on both datasets. This is consistent with wavelet thresholding depending on signal statistics that hold at low compression but break down once only a small fraction of coefficients is retained. LARA's degradation, by contrast, is more gradual across the same range.
+
+\textbf{The CR=20 peak reproduces across datasets.} LARA's best operating point on STEAD was CR=20, and the same ratio also produces its best SNR and correlation on both TXED (25.24~dB, 0.971) and INSTANCE (24.88~dB, 0.963). 
+Moreover, LARA specifically, reconstruction quality is at least as high on INSTANCE as on TXED at nearly every compression ratio, with TXED only marginally ahead at CR=20 and CR=60. This runs counter to any straightforward expectation that a smaller or more localized regional dataset would be inherently harder to generalize to; dataset-specific waveform characteristics appear to matter more than dataset size or perceived complexity here.
+
+\subsubsection{Implications for Operational Deployment}
+
+These results suggest that LARA, once trained on a broad dataset such as STEAD, can be applied to other regional networks without retraining and still deliver usable compression at moderate-to-high ratios. This is useful in practice, since retraining a compression model for every new network is often impractical for real-time monitoring infrastructure. The wavelet methods remain a reasonable choice only when compression demands are modest (CR below roughly 10--15) and the deployment context does not require robustness to distribution shift; beyond that range, their performance on unseen data becomes difficult to predict in advance.
+
+
+\subsection{Generalization to Distributed Acoustic Sensing (DAS) Data}
+\label{subsec:das}
+
+To further evaluate the generalization capability of the proposed compression framework, we apply it to a real distributed acoustic sensing (DAS) dataset acquired at the Utah FORGE geothermal field \cite{dasdenoising2023}, using a CR of 10, corresponding to a tenfold reduction in the latent representation size. Since the network is trained exclusively on conventional seismic waveforms, this experiment constitutes a challenging out-of-distribution evaluation, as DAS data exhibit different acquisition physics, dense spatial sampling, and distinct noise characteristics relative to single-component seismometer recordings.
+
+Figure~\ref{fig:das-forge} presents the reconstruction results for a real earthquake recorded by the DAS system at the Utah FORGE site. Although DAS measurements are naturally represented as two-dimensional shot gathers (time $\times$ channels), the proposed framework operates on one-dimensional signals. Therefore, each DAS channel is processed independently by dividing it into overlapping windows of 1,500 samples. Each window is compressed by a factor of 10 into its latent representation and subsequently reconstructed by the decoder. The complete trace is then recovered using Gaussian-weighted overlap-add reconstruction to ensure smooth transitions between adjacent windows, after which all reconstructed traces are assembled to form the final DAS shot gather.
+
+Despite the 10$\times$ compression, the reconstructed DAS data closely match the original recordings, preserving coherent seismic arrivals, including direct and reflected wavefields, as well as weaker seismic events across the array. The residual is relatively small and is primarily associated with high-frequency noise and localized high-amplitude features, while the coherent seismic energy is largely preserved. Remarkably, although the network was trained exclusively on conventional one-dimensional seismic waveforms, without any DAS data or domain adaptation, it successfully reconstructs the DAS recordings with high fidelity. These results demonstrate that the learned latent representation captures fundamental characteristics of seismic wavefields rather than sensor- or acquisition-specific features, enabling substantial data reduction while preserving the information required for seismic interpretation. This strong out-of-distribution performance highlights the robustness of the proposed framework and its potential applicability to a broader range of seismic sensing technologies beyond the training domain.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\textwidth]{Figures/Figure7/DAS_reconstruction_CR10.jpeg}
+\caption{Reconstruction of a real DAS shot gather from the Utah FORGE geothermal field at CR=10, using a model trained exclusively on conventional seismic waveforms. (a) Original DAS data. (b) DL-reconstructed data. (c) Reconstruction error. Coherent seismic arrivals, including the moveout event visible near channel 720--900, are well preserved despite the out-of-distribution setting.}
+\label{fig:das-forge}
+\end{figure}
+
+\subsection{Discussion and Limitations}
+\label{subsec:discussion}
+
+Four limitations bear directly on how the results above should be read, and we state them explicitly rather than leaving them to be inferred.
+
+\textbf{Absolute amplitude is not preserved by the codec as trained.} Each trace is rescaled to $[0,1]$ by its own minimum and maximum before it is encoded, and the decoder produces a sigmoid output, so the reconstruction is confined to the same interval. Two consequences follow. The network is trained to reproduce a rescaled trace, and it therefore carries no information about the physical scale of the event: a reconstruction cannot be returned to counts per second or to any other physical unit from the code alone, and a magnitude estimated directly from it would be meaningless. Restoring the scale requires the per-trace minimum and maximum, which are two real numbers, and these are not currently transmitted; at the ratios in Table~\ref{tab:bitrate} they would be a negligible addition to the code, but they must be sent for absolute amplitude to be recoverable. Relatedly, the first-motion polarity diagnostic that would normally reveal a polarity error is unusable in this setting, because no sample of a rescaled input trace is negative and no sample of a sigmoid output is negative either, so the polarity of the reference and the reconstruction are both positive on every trace. Any deployment that needs amplitude or polarity must either transmit the two scaling constants or be retrained with a sign-preserving normalization and a linear output.
+
+\textbf{The evaluation set is one distribution.} All reconstruction-quality numbers here come from 200 held-out traces drawn from the same pool as the training data: local earthquakes above magnitude 2.5, within 60~km, on the vertical component. We have not evaluated the model on smaller events, on more distant sources, on noise-dominated traces, or on the horizontal components, so the generalization claims of Section~\ref{subsec:zero-shot} rest on the external-dataset assessment rather than on a controlled variation of these four factors. Isolating them would require four further evaluation sets drawn from the same network, which is a natural extension and one we intend to pursue.
+
+\textbf{Dispersion is measured across traces, not across runs.} Every figure in Section~\ref{subsec:analysis} is a single training run per model and ratio, and the error bars we report are the standard deviation and interquartile range of the SNR across the 200 evaluation traces. They describe how much the reconstruction quality varies from trace to trace, which is the dominant source of variation in deployment, and they do not describe how much it varies between independent training runs. Several of the margins in this paper, notably the 0.22 to 0.52~dB by which LARA leads the better baseline above a ratio of 10, are of the same order as that across-trace dispersion, and we do not claim them to be individually significant. Repeating the study across several initializations would be needed to separate the two, and we regard that as the most consequential omission in the present work.
+
+\textbf{The external-dataset results predate the current model.} The zero-shot assessment of Section~\ref{subsec:zero-shot} and the distributed acoustic sensing application of Section~\ref{subsec:das} were carried out on the earlier heavy-capacity configuration of this model, and the archived code release corresponds to that earlier version, as noted in the Code Availability statement. The numbers in those two sections are reported here unchanged, and they should be read as evidence about the earlier configuration rather than about LARA as specified in Section~\ref{subsec:architecture}. Two specific consequences follow. First, those sections refer to a ratio of 20 as the operating point at which the model performed best, whereas on the present training pool the reconstruction SNR decreases monotonically with the ratio and no intermediate ratio is favoured, so the choice of 20 there is not motivated by anything in Section~\ref{subsec:analysis}. Second, the compression ratios in those sections are matched to the learned models by latent length alone, as was true here, and Section~\ref{subsec:bitrate} shows that a matched latent length does not imply a matched transmitted size; the external comparison should therefore be read as equal-latent-length rather than equal-bit-rate. Two further limitations attach to the distributed acoustic sensing application specifically. Each channel is processed independently, so the substantial spatial redundancy between neighbouring channels is not exploited, and a two-dimensional codec that did exploit it would be expected to reach the same fidelity at a lower ratio. And the application is reported as images only, with no quantitative reconstruction metric computed, so no numerical claim about its fidelity is made.
+
+Taken together, these limitations point to a consistent picture. LARA is well characterized as a fixed-length, high-ratio codec: it is the only method tested that retains waveform shape beyond a ratio of about 30, it is the most parameter-efficient of the learned models below a ratio of 20, and it can be verified to an exact compression ratio. What remains unestablished is how much of its advantage survives a change of acquisition system or sensor, and how much of the reported margin is attributable to the architecture rather than to the particular training run.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper presented the Light Autoencoder for Reconstruction and Analysis (LARA), a deep learning architecture for seismic waveform compression. It combines residual learning blocks, which mitigate information loss during encoding, with channel-wise attention, which recalibrates feature responses during reconstruction, and it adds a filled projection bottleneck that keeps the code length and the projection width independent of one another.
+
+Evaluation on the STEAD dataset gives a regime-dependent picture rather than a single optimum. LARA attains the highest signal-to-noise ratio of the three learned models at every one of the ten compression ratios tested, by between 0.22 and 2.52~dB, and reaches 13.5~dB of reconstruction SNR per million parameters against 4.8 and 4.3~dB for the two baselines. It is not the best method at every ratio: the wavelet compressors are more accurate up to a ratio of about 30, and we recommend them there, since they are also free of any trained parameters. Above a ratio of 30 the wavelet compressors fail, retaining correlations below 0.07 by a ratio of 50, and LARA is the only method tested that continues to preserve waveform shape, leading the best wavelet method by 1.66, 9.48, and 13.11~dB at ratios of 50, 60, and 100. A controlled ablation attributes this to the architecture as a whole rather than to any single block, and shows that the attention and residual components matter mainly where the code is long.
+
+A controlled comparison of seven training objectives found that no spectral-, phase-, or wavelet-domain loss improves on the mean squared error, which we therefore retain. Measuring the coded size of the latent rather than its dimensionality shows that quantization and entropy coding reduce the transmitted trace by a factor of 4.14 to 9.04 for at most 0.41~dB of additional reconstruction loss, although we find that almost all of this gain comes from the reduction in quantizer depth rather than from context modelling. We also report that the arithmetic coder, not the network, is the larger cost at every ratio, and that the trained weights of the model at high ratios contain a large fraction of subnormal values that impose a severe penalty on processors without flush-to-zero.
+
+Future work will focus on hybrid architectures that incorporate wavelet transforms alongside the autoencoder framework, with the aim of further improving reconstruction fidelity across all compression ratios.
+
+\section*{Code Availability}
+
+The code that produced every result in this paper is released under the MIT License and is publicly available at \url{https://github.com/Emad-helal/LARA-Seismic-Compression}. It comprises two notebooks, a directory of seventeen scripts, a directory of result files against which the paper's numbers can be checked, and a \texttt{requirements.txt} recording the environment.
+
+\begin{itemize}
+    \item \textbf{\texttt{notebooks/Final\_LARA\_27092026.ipynb}} trains LARA, the two baseline autoencoders, and the three wavelet compressors over the ten compression ratios, and produces the reconstruction-quality numbers of Section~\ref{subsec:analysis} and Section~\ref{subsec:component-ablation}.
+    \item \textbf{\texttt{notebooks/Final\_Ablation\_27092026.ipynb}} produces the five-arm component comparison of Table~2.
+    \item \textbf{\texttt{scripts/}} holds the figure and measurement code, grouped by the section of the paper each one supports:
+      \begin{itemize}\raggedright
+        \item Figures 1 and 6--8: \texttt{Final\_LARA\_pipeline}, \texttt{Final\_LARA\_param\_vs\_cr}, \texttt{Final\_LARA\_\allowbreak{}recon\_\allowbreak{}figures}.
+        \item Figures 9--10 and Table~4: \texttt{Final\_LARA\_bps\_analysis} and the arithmetic coder \texttt{arithcoder}.
+        \item Section~\ref{subsec:cost}: \texttt{Final\_LARA\_compute\_bench} and \texttt{extract\_subnormal\_fraction}.
+        \item Section~\ref{subsec:loss-ablation}: \texttt{build\_loss\_ablation\_LARA\_27092026}.
+        \item Verification: \texttt{audit\_numbers.py}.
+      \end{itemize}
+      Three further scripts assemble the technical notes, and one builds the letter responding to the reviewers.
+    \item \textbf{\texttt{paper/}} holds the \LaTeX{} source of this article, so that the claims described next can be checked against the text they support.
+\end{itemize}
+
+\noindent \textbf{Verification of the reported numbers.} The script \texttt{audit\_numbers.py} re-derives every quantitative claim in this paper from the result files and exits with a non-zero status if any of them disagrees with the manuscript. It currently runs 243 checks with no failures, and it runs without modification from a fresh clone of the repository, since it locates both the result files and the article source relative to itself. Four of the checks address failure modes specific to this revision. The compression ratio is verified by measuring the width of the latent of every trained model rather than by trusting the requested value, and a training run aborts if any model disagrees with its target. The analysis scripts embed the \texttt{LARA} class and check its SHA-256 digest against the trained architecture, so a result cannot be reported against a model that has drifted from the one that was trained. The bit-rate and loss-function scripts reload the published checkpoints, recompute the reported reconstruction quality, and compare it against the published table before any new figure is drawn. And because the subnormal-weight finding of Section~\ref{subsec:cost} depends only on the stored tensors and not on the hardware, it is recomputed directly from the published checkpoints by \texttt{extract\_subnormal\_fraction.py}, which reproduces the reported range without a GPU.
+
+We mention these checks because the central problem with the version of this work originally submitted was that its numbers could not be traced to any data, and the appropriate response to that is to make the traceability mechanical rather than to ask the reader to accept it.
+
+\noindent \textbf{Superseded archive.} The earlier version of this work is preserved permanently at \url{https://doi.org/10.5281/zenodo.20172322} (v1.0.0, 13 May 2026). The repository has since been renamed from \texttt{HARA-Seismic-Compression} to \texttt{LARA-Seismic-Compression}; GitHub maintains a permanent redirect from the old name, so earlier citations continue to resolve. We draw the reader's attention to the difference between the two. The archived version contains two notebooks, \texttt{Final\_Enhanced\_Autoencoder\_with\_}\allowbreak{}\texttt{Wavelet\_comparisons.ipynb}\allowbreak{} and \texttt{Ablation\_study.ipynb}\allowbreak, together with a \texttt{README} that states a magnitude threshold of three, a 90/10 split, a compression ratio-dependent epoch budget, and a peak signal-to-noise ratio of 35.41~dB with a structural similarity of 0.992 at a ratio of 20. Every one of those settings and values is superseded by the re-analysis reported here, and they are not the numbers in this paper. The present study uses a magnitude threshold of 2.5, an 80/10/10 split, a uniform epoch cap, the light-capacity architecture, and a signal-to-noise ratio that decreases monotonically with the compression ratio. The archive is retained because it is the citable version of record for the earlier work, and because the external-dataset and distributed acoustic sensing results discussed in Section~\ref{subsec:zero-shot} and Section~\ref{subsec:das} were obtained with that version.
+
+The experiments are seeded throughout at 42, the two split stages are drawn at that seed, and the benchmark measurements were taken with deterministic cuDNN kernels. Three checks are built into the scripts and are worth noting because they would otherwise be silent sources of error. The compression ratio is verified by measuring the width of the latent of every trained model rather than by trusting the requested value, and the run aborts if any model disagrees with its target. The analysis scripts embed the LARA class and check its SHA-256 digest against the trained architecture, so a study cannot be reported against a model that has drifted from the one that was trained. The bit-rate and loss-function scripts reload the published checkpoints, recompute the reported reconstruction quality, and compare it against the published table before any new figure is drawn.
+
+\noindent The seismic waveforms used are from the publicly available Stanford Earthquake Dataset \cite{mousavi2019stanford}, accessible at \url{https://github.com/smousavi05/STEAD}.
+
+\noindent The Texas Earthquake Dataset (TXED) and INSTANCE dataset used for the zero-shot generalization assessment in Section~\ref{subsec:zero-shot} are publicly available at:
+\begin{itemize}
+    \item TXED \cite{txed}: \url{https://doi.org/10.1785/0220230327}
+    \item INSTANCE \cite{michelini2021instance}: \url{https://doi.org/10.5194/essd-13-5509-2021}
+\end{itemize}
+
+\noindent The distributed acoustic sensing (DAS) data from the Utah FORGE geothermal field used in Section~\ref{subsec:das} are described in \cite{dasdenoising2023}, accessible at \url{https://doi.org/10.1785/0220220117}.
+
+
+
+% -------------------- Bibliography --------------------
+\bibliography{Myreferences}
+
+\section*{Author Contributions}
+
+E.B.H. and M.M.I.: Conceptualization of this study, Methodology, O.M.S. implemented the models, conducted the experiments, and analyzed the results, Software. A.G.H.: Supervision, Validation. R.K.: Data curation, Writing -- original draft preparation. A.A.D contributed to the conceptual framing, provided technical input throughout the study. All authors reviewed the manuscript.
+
+\section*{Funding}
+Open access funding provided by The Science, Technology \&  Innovation Funding Authority (STDF) in cooperation with The Egyptian Knowledge Bank (EKB).
+
+\section*{Declarations}
+
+\section*{Competing interests}
+The authors declare no competing interests.
+
+\section*{Additional information}
+\textbf{Correspondence} and requests for materials should be addressed to M.M.I.
+
+\end{document}

@@ -1,0 +1,57 @@
+# Environment for the analysis reported in
+# "Seismic Waveform Compression Using a Light Attention-Enhanced Residual Autoencoder"
+#
+# Two environments were used and they are NOT interchangeable:
+#   * the training and figure run  -> CUDA build of torch 2.5.1 on an RTX 4080 SUPER
+#   * the CPU cost benchmark       -> torch 2.14.0+cpu on an Intel Core Ultra 7 155H
+# The bit-rate and cost sections are labelled with the platform they were measured
+# on, because the two hosts differ in more than the accelerator.
+#
+# Lines beginning with '#' are exact pins, because the reported numbers depend on
+# them. Lines without are floors, and were satisfied by the versions actually used
+# in parentheses.
+
+# --- exact: the run that produced the reconstruction-quality tables ---
+torch==2.5.1                  # CUDA 11.8 build
+numpy                          # (1.26 / 2.x depending on the torch build)
+pandas                         # (2.x)
+scikit-learn                   # (1.5)  train_test_split
+h5py                           # (3.11)  reading merged.hdf5
+PyWavelets                     # (1.5)   db4 / sym8 / coif3 baselines
+scikit-image                   # (0.22)  structural_similarity
+matplotlib                     # (3.8)   Agg backend throughout
+
+# --- exact: required only by the bit-rate analysis (Section "Effective Bit Rate") ---
+constriction                   # (0.2)   adaptive range coder
+
+# --- only for the computational-cost benchmark ---
+psutil                         # (5.9)   host and accelerator fingerprinting
+
+# --- only for the technical-note builders ---
+python-docx                    # (1.2)   .docx technical notes
+
+# --- environment for reproducing the manuscript PDF ---
+# MiKTeX 26.5 with: amsmath, amsfonts, algorithm, algorithmic, array, multirow,
+# graphicx, subcaption, dblfloatfix, float, booktabs, textcomp, url, verbatim,
+# cite, etoolbox, hyperref, natbib-style bibliographic formatting.
+# epstopdf must be enabled (pdflatex -shell-escape) for the EPS figures.
+
+# ---------------------------------------------------------------------------
+# Notes
+# ---------------------------------------------------------------------------
+# 1. The notebooks are Python 3.11 and 3.12; either works. The bit-rate script
+#    overrides the notebook data paths and forces device="cpu", so it can be run
+#    on a machine with no GPU.
+# 2. `constriction` is not optional. The entropy coder in arithcoder.py is built on
+#    it, and a hand-written coder was discarded earlier in this work because it
+#    desynchronised. Every reported rate is verified by decoding the trace back.
+# 3. Determinism: the training notebooks set torch/numpy/random seeds to 42 and
+#    call set_seed(42) before every (CR, arm) pair, so all ablation arms at a
+#    given ratio start from identical weights. The cost benchmark runs each thread
+#    count in a separate process, because switching the OpenMP pool inside one
+#    process inflates single-thread latency by an order of magnitude.
+# 4. Expected runtimes on an RTX 4080 SUPER:
+#       Final_LARA_27092026.ipynb              the main 60-configuration study
+#       Final_Ablation_27092026.ipynb          50 configurations, ~18 h
+#       build_loss_ablation_LARA_27092026.py   70 configurations, ~8-9 h
+#    Run every script with --smoke first to verify the pipeline in ~2 minutes.
