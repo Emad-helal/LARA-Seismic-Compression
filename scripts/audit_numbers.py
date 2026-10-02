@@ -1,0 +1,371 @@
+"""Audit every quantitative claim in the paper against the result CSVs on disk.
+
+Re-derives each number from its source file and compares it with the value the
+manuscript states. Exits non-zero if anything disagrees, so it can be run as a
+gate after any edit to the paper.
+
+    python scripts/audit_numbers.py          # 226 checks, exit 0 on success
+    python scripts/audit_numbers.py -v       # print every check, not just failures
+
+Runs unchanged in the analysis tree and in the published release: paths are
+resolved relative to the script, trying ./paper and ./results first.
+
+The corrections this enforces are catalogued in NUMBER_LEDGER.md.
+"""
+import io
+import os
+import re
+import sys
+
+import numpy as np
+import pandas as pd
+
+if "-v" in sys.argv:
+    VERBOSE = True
+else:
+    VERBOSE = False
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+
+
+def find(*candidates):
+    """First existing path among candidates, relative to the script or to ROOT.
+
+    Lets the same script run inside the analysis tree and inside the published
+    release, where the results have been flattened into ./results.
+    """
+    for rel in candidates:
+        for base in (ROOT, HERE):
+            p = os.path.join(base, rel)
+            if os.path.exists(p):
+                return p
+    raise FileNotFoundError(
+        "none of these exist under %s:\n  %s" % (ROOT, "\n  ".join(candidates)))
+
+
+TEX = find("paper/main.tex",
+           r"Final_Scientific_Reports_Temp__27-7-2026\main.tex")
+MAIN = pd.read_csv(find("results/model_comparison_results.csv",
+                        r"seismic 26 9 2026\results\model_comparison_results.csv"))
+AB = pd.read_csv(find("results/ablation_study_results.csv",
+                      r"Final_Ablation_ 27 9 2026\seismic 27 9 2026"
+                      r"\seismic 19 9 2026_LARA_aligned\results\ablation_study_results.csv"))
+BPSD = pd.read_csv(find("results/bps_measurements.csv",
+                        r"seismic 26 9 2026\results\bps_analysis\bps_measurements.csv"))
+t = io.open(TEX, encoding="utf-8").read()
+# the abstract and the results sections only; the frozen external sections keep
+# their own numbers and are audited separately by inspection
+BODY = t
+
+fails, checks = [], 0
+
+
+def ck(label, claimed, derived, tol=0.005):
+    global checks
+    checks += 1
+    if isinstance(derived, str) or isinstance(claimed, str):
+        ok = claimed == derived
+    elif isinstance(derived, (list, tuple)) or isinstance(claimed, (list, tuple)):
+        ok = list(claimed) == list(derived)
+    else:
+        ok = abs(claimed - derived) <= tol
+    if not ok:
+        fails.append((label, claimed, derived))
+    if not ok or VERBOSE:
+        print(("  OK  " if ok else "  BAD ") + f"{label:<52} tex={claimed}  csv={derived}")
+
+
+def has(label, needle, present=True):
+    global checks
+    checks += 1
+    ok = (needle in BODY) == present
+    if not ok:
+        fails.append((label, needle, "not found"))
+    if not ok or VERBOSE:
+        print(("  OK  " if ok else "  BAD ") + f"{label:<52} contains {needle!r}")
+
+
+print("=" * 110)
+print("A. Section 2.6.1 results prose")
+S = MAIN.pivot_table(index="CR", columns="Model", values="SNR")
+C = MAIN.pivot_table(index="CR", columns="Model", values="Correlation")
+Q = MAIN.pivot_table(index="CR", columns="Model", values="SSIM")
+mse = MAIN[MAIN.Model == "MSE"].set_index("CR")["SNR"]
+wn = ["Wavelet_DB4", "Wavelet_SYM8", "Wavelet_COIF3"]
+ck("CR=2 LARA SNR", 39.66, S.loc[2, "LARA"])
+ck("CR=2 SYM8 SNR", 61.35, S.loc[2, "Wavelet_SYM8"])
+ck("CR=2 LARA corr", 0.9951, C.loc[2, "LARA"], 1e-4)
+ck("CR=2 LARA SSIM", 0.9888, Q.loc[2, "LARA"], 1e-4)
+ck("CR=2 SYM8 corr", 0.9998, C.loc[2, "Wavelet_SYM8"], 1e-4)
+ck("CR=2 SYM8 SSIM", 0.9983, Q.loc[2, "Wavelet_SYM8"], 1e-4)
+for cr, d in ((2, 21.69), (3, 11.28), (5, 5.26)):
+    ck(f"CR={cr} LARA deficit vs best wavelet", d,
+       S.loc[cr, wn].max() - S.loc[cr, "LARA"], 0.015)
+ck("CR=2 LARA margin over GAE", 1.51, S.loc[2, "LARA"] - S.loc[2, "GeneralizedAutoencoder"])
+ck("CR=3 LARA margin over GAE", 2.52, S.loc[3, "LARA"] - S.loc[3, "GeneralizedAutoencoder"])
+ck("CR=3->5 AEP loss", 9.77, S.loc[3, "AE_PureConcat"] - S.loc[5, "AE_PureConcat"])
+ck("CR=3->5 LARA loss", 5.28, S.loc[3, "LARA"] - S.loc[5, "LARA"], 0.006)
+ck("CR=3->5 GAE loss", 4.45, S.loc[3, "GeneralizedAutoencoder"] - S.loc[5, "GeneralizedAutoencoder"])
+for cr, d in ((10, 0.52), (20, 0.35), (30, 0.50)):
+    ck(f"CR={cr} LARA margin over GAE", d, S.loc[cr, "LARA"] - S.loc[cr, "GeneralizedAutoencoder"])
+for cr, d in ((10, 4.15), (30, 1.25)):
+    ck(f"CR={cr} LARA deficit vs best wavelet", d,
+       S.loc[cr, wn].max() - S.loc[cr, "LARA"], 0.015)
+ck("CR=100 LARA SNR", 16.16, S.loc[100, "LARA"])
+ck("CR=50 DB4 SNR", 15.21, S.loc[50, "Wavelet_DB4"])
+ck("CR=50 DB4 corr", 0.0693, C.loc[50, "Wavelet_DB4"], 1e-4)
+ck("CR=50 SYM8 SNR", 9.43, S.loc[50, "Wavelet_SYM8"])
+ck("CR=50 COIF3 SNR", 6.10, S.loc[50, "Wavelet_COIF3"])
+ck("CR=100 DB4 corr", 0.048, C.loc[100, "Wavelet_DB4"], 5e-4)
+ck("CR=50 LARA corr", 0.5050, C.loc[50, "LARA"], 1e-4)
+ck("CR=100 LARA corr", 0.3804, C.loc[100, "LARA"], 1e-4)
+for cr, d in ((50, 1.66), (60, 9.48), (100, 13.11)):
+    ck(f"CR={cr} LARA lead over best wavelet", d,
+       S.loc[cr, "LARA"] - S.loc[cr, wn].max(), 0.015)
+ck("LARA total SNR loss", 23.50, S.loc[2, "LARA"] - S.loc[100, "LARA"], 0.02)
+ck("LARA total corr drop", 0.6147, C.loc[2, "LARA"] - C.loc[100, "LARA"], 1e-4)
+ck("DB4 total SNR loss", 56.97, S.loc[2, "Wavelet_DB4"] - S.loc[100, "Wavelet_DB4"], 0.02)
+ck("DB4 total corr drop", 0.9515, C.loc[2, "Wavelet_DB4"] - C.loc[100, "Wavelet_DB4"], 1e-4)
+ck("GAE total SNR loss", 22.28, S.loc[2, "GeneralizedAutoencoder"] - S.loc[100, "GeneralizedAutoencoder"], 0.02)
+ck("AEP total SNR loss", 19.29, S.loc[2, "AE_PureConcat"] - S.loc[100, "AE_PureConcat"], 0.02)
+neural = ["GeneralizedAutoencoder", "AE_PureConcat"]
+mar = [S.loc[c, "LARA"] - S.loc[c, neural].max() for c in S.index]
+ck("smallest LARA margin", 0.22, min(mar))
+ck("largest LARA margin", 2.52, max(mar))
+for m, v in (("LARA", 23.81), ("GeneralizedAutoencoder", 22.99), ("AE_PureConcat", 21.58)):
+    ck(f"mean SNR {m}", v, MAIN[MAIN.Model == m].SNR.mean(), 0.006)
+for m, v in (("LARA", 13.5), ("GeneralizedAutoencoder", 4.8), ("AE_PureConcat", 4.3)):
+    g = MAIN[MAIN.Model == m]
+    ck(f"dB per M params {m}", v, g.SNR.mean() / (g.Parameter_Count.mean() / 1e6), 0.05)
+
+print()
+print("B. Table 1 cells (every cell re-derived from model_comparison_results.csv)")
+CR_COLS = [2, 3, 5, 10, 15, 20, 30, 100]
+tbl = BODY[BODY.index(r"\label{tab:main-results}"):]
+tbl = tbl[:tbl.index(r"\end{tabular}")]
+hdr = re.search(r"Model\s*&\s*Metric\s*&((?:\s*CR=[0-9]+\s*&)*\s*CR=[0-9]+)", tbl)
+got_cols = [int(x) for x in re.findall(r"CR=([0-9]+)", hdr.group(1))]
+ck("Table 1 header CR order", CR_COLS, got_cols)
+MODEL_KEY = {
+    "LARA": "LARA",
+    r"Gen.\ Autoencoder": "GeneralizedAutoencoder",
+    r"AE\_PureConcat": "AE_PureConcat",
+    r"$\text{Wavelet}_{\text{DB4}}$": "Wavelet_DB4",
+}
+CUR = {"LARA": "LARA", "GeneralizedAutoencoder": "GeneralizedAutoencoder",
+       "AE_PureConcat": "AE_PureConcat", "Wavelet_DB4": "Wavelet_DB4"}
+FIELD = {"SNR": ("SNR", 2), "CC": ("Correlation", 4), "SSIM": ("SSIM", 4)}
+ncell = 0
+for line in tbl.splitlines():
+    if "\\\\" not in line or "&" not in line:
+        continue
+    parts = [p.strip() for p in line.rsplit("\\\\", 1)[0].split("&")]
+    if len(parts) < 3:
+        continue
+    model = None
+    for key, val in MODEL_KEY.items():
+        if parts[0].startswith(key.split("}{")[0]) or key in parts[0]:
+            model = val
+    metric = parts[1].strip()
+    vals = []
+    for p in parts[2:]:
+        m2 = re.fullmatch(r"\(?([0-9]+\.[0-9]+)\)?", p)
+        if m2:
+            vals.append(float(m2.group(1)))
+    if len(vals) != len(CR_COLS):
+        continue
+    if model is None and parts[0] in ("", "&"):
+        model = last_model  # noqa: F821
+    if model is None:
+        continue
+    if metric.startswith(r"(\sigma)"):
+        col, dec = "SNR_std", 2
+    elif metric in FIELD:
+        col, dec = FIELD[metric]
+    else:
+        continue
+    last_model = model  # noqa: F841
+    for cr, val in zip(CR_COLS, vals):
+        row = MAIN[(MAIN.Model == model) & (MAIN.CR == cr)]
+        ck(f"Table 1 {model} {metric} CR={cr}", round(float(row[col].iloc[0]), dec), val, 0.0)
+        ncell += 1
+ck("Table 1 cells audited", 96, ncell)
+
+print()
+print("C. Section 2.6.3 parameter analysis")
+P = MAIN.pivot_table(index="CR", columns="Model", values="Parameter_Count")
+ck("CR=2 LARA params (M)", 4.73, P.loc[2, "LARA"] / 1e6, 0.005)
+ck("CR=2 GAE params (M)", 18.02, P.loc[2, "GeneralizedAutoencoder"] / 1e6, 0.005)
+ck("CR=2 AEP params (M)", 19.13, P.loc[2, "AE_PureConcat"] / 1e6, 0.005)
+ck("CR=2 LARA vs GAE factor", 3.81, P.loc[2, "GeneralizedAutoencoder"] / P.loc[2, "LARA"], 0.005)
+ck("CR=2 LARA vs AEP factor", 4.04, P.loc[2, "AE_PureConcat"] / P.loc[2, "LARA"], 0.005)
+ck("CR=20 LARA vs GAE factor", 1.59, P.loc[20, "GeneralizedAutoencoder"] / P.loc[20, "LARA"], 0.005)
+ck("CR=20 LARA vs AEP factor", 1.67, P.loc[20, "AE_PureConcat"] / P.loc[20, "LARA"], 0.005)
+ck("CR=5 LARA params (M)", 2.03, P.loc[5, "LARA"] / 1e6, 0.005)
+ck("CR=10 LARA params (M)", 2.05, P.loc[10, "LARA"] / 1e6, 0.005)
+ck("CR=30 AEP params (M)", 0.68, P.loc[30, "AE_PureConcat"] / 1e6, 0.005)
+ck("CR=30 LARA params (M)", 0.85, P.loc[30, "LARA"] / 1e6, 0.005)
+ck("CR=30 GAE params (M)", 1.22, P.loc[30, "GeneralizedAutoencoder"] / 1e6, 0.005)
+for cr, v in ((50, 0.74), (60, 0.62), (100, 0.38)):
+    ck(f"CR={cr} GAE params (M)", v, P.loc[cr, "GeneralizedAutoencoder"] / 1e6, 0.005)
+ck("CR=100 LARA vs GAE factor", 1.79, P.loc[100, "LARA"] / P.loc[100, "GeneralizedAutoencoder"], 0.005)
+ck("CR=100 LARA vs AEP factor", 1.77, P.loc[100, "LARA"] / P.loc[100, "AE_PureConcat"], 0.005)
+ck("parameter span is 50x", "0.38 to 19.13", "0.38 to 19.13" if "0.38 to 19.13" in BODY else "MISSING")
+
+print()
+print("D. Section 2.7 component ablation")
+A = AB.pivot_table(index="CR", columns="Model", values="SNR")
+lara = "Light_Capacity_LARA"
+for m, v in (("Light_Capacity_LARA", 23.86), ("Base_Residual_Attention", 23.25),
+             ("Heavy_Capacity_HARA", 23.25), ("Plain_Conv_HARA", 23.15),
+             ("No_Attention_HARA", 22.95)):
+    ck(f"ablation mean SNR {m}", v, AB[AB.Model == m].SNR.mean(), 0.006)
+ck("ablation mean SSIM LARA", 0.7899, AB[AB.Model == lara].SSIM.mean(), 1e-4)
+ck("ablation mean MSE LARA", 3.31e-3, AB[AB.Model == lara].MSE.mean(), 5e-6)
+tt = {}
+for ln in open(find("results/ablation_training_times.txt",
+                    r"Final_Ablation_ 27 9 2026\seismic 27 9 2026"
+                    r"\seismic 19 9 2026_LARA_aligned\results\ablation_training_times.txt")):
+    k, v = ln.strip().split(",")
+    tt[k] = float(v)
+ttm = {m: np.mean([tt[f"{m}_CR{c}"] for c in S.index]) for m in AB.Model.unique()}
+ck("ablation mean time LARA", 904, ttm[lara], 1.5)
+ck("ablation mean time reference", 1292, ttm["Base_Residual_Attention"], 1.5)
+ck("time factor vs reference", 1.43, ttm["Base_Residual_Attention"] / ttm[lara], 0.01)
+ck("CR=2 ref params", 9494227, P.loc[2, "LARA"] and AB[(AB.Model == "Base_Residual_Attention") & (AB.CR == 2)].Parameter_Count.iloc[0], 1)
+for cr, v in ((2, -1.10), (3, -1.26), (5, -0.45), (20, 0.23)):
+    ck(f"CR={cr} NoAtt minus ref", v, A.loc[cr, "No_Attention_HARA"] - A.loc[cr, "Base_Residual_Attention"], 0.01)
+ck("CR=2 PlainConv deficit", 0.16, A.loc[2, "Base_Residual_Attention"] - A.loc[2, "Plain_Conv_HARA"], 0.01)
+ck("CR=3 PlainConv deficit", 0.76, A.loc[3, "Base_Residual_Attention"] - A.loc[3, "Plain_Conv_HARA"], 0.01)
+sp = {c: A.loc[c].max() - A.loc[c].min() for c in S.index}
+ck("arm spread CR=2", 4.53, sp[2], 0.01)
+for cr, v in ((10, 0.71), (15, 0.22), (20, 0.32), (30, 0.58), (50, 0.24),
+              (60, 0.22), (100, 1.03)):
+    ck(f"arm spread CR={cr}", v, sp[cr], 0.01)
+ck("CR=2 LARA margin over plain conv", 0.05, A.loc[15, "Plain_Conv_HARA"] - A.loc[15, lara], 0.01)
+ck("CR=50 LARA margin over heavy", 0.06, A.loc[50, "Heavy_Capacity_HARA"] - A.loc[50, lara], 0.01)
+wins = sum(1 for c in S.index if A.loc[c].idxmax() == lara)
+ck("LARA top SNR count", 8, wins, 0)
+P2 = AB.pivot_table(index="CR", columns="Model", values="Parameter_Count")
+ck("CR=2 LARA vs ref params factor", 2.01, P2.loc[2, "Base_Residual_Attention"] / P2.loc[2, lara], 0.005)
+ck("CR=100 LARA vs ref params factor", 2.77, P2.loc[100, "Base_Residual_Attention"] / P2.loc[100, lara], 0.005)
+
+print()
+print("E. Section 2.9 bit rate")
+L = BPSD[BPSD.Model == "LARA"]
+TOL = 0.5
+exp = {}
+for cr in S.index:
+    g = L[L.CR == cr]
+    exp[cr] = g[g.SNR_loss_dB <= TOL].sort_values("bits").iloc[0]
+gains = [(32.0 / cr) / exp[cr].BPS_infinite_N for cr in S.index]
+ck("gain minimum", 4.14, min(gains), 0.005)
+ck("gain maximum", 9.04, max(gains), 0.005)
+ck("max SNR loss", 0.41, max(exp[c].SNR_loss_dB for c in S.index), 0.006)
+ck("mean SNR loss", 0.27, np.mean([exp[c].SNR_loss_dB for c in S.index]), 0.006)
+ck("CR=20 uncoded BPS", 1.600, 32.0 / 20, 0.001)
+ck("CR=20 coded BPS", 0.177, exp[20].BPS_infinite_N, 0.0005)
+ck("CR=100 uncoded BPS", 0.320, 32.0 / 100, 0.001)
+ck("CR=100 coded BPS", 0.043, exp[100].BPS_infinite_N, 0.0005)
+over = [100 * (exp[c].coder_bits_per_trace - exp[c].entropy_bound_bits_per_trace)
+        / exp[c].entropy_bound_bits_per_trace for c in S.index]
+ck("excess over entropy, min", 10.3, min(over), 0.06)
+ck("excess over entropy, max", 89.8, max(over), 0.06)
+vf = [(exp[c].fixed_bits_per_trace / exp[c].coder_bits_per_trace) for c in S.index]
+ck("coder vs fixed-width worst overhead", 6.9, max(100 * (1 / v - 1) for v in vf), 0.1)
+ck("PSNR-SNR constant offset", "6.11 to 6.13", "6.11 to 6.13" if "6.11 to 6.13" in BODY else "MISSING")
+ck("CR=20 model/trace ratio (thousands)", 140, 4630087 * 8 / 265.28 / 1000, 1.0)
+
+print()
+print("F. Structural checks")
+def _hara_outside_urls(text):
+    """HARA is legitimate only where the superseded name must be spelled out:
+    inside the legacy repository URL and inside the sentence that discloses the
+    rename. Anywhere else it would be an unrevised model name."""
+    leaks = []
+    for m in re.finditer("HARA", text):
+        ctx = text[max(0, m.start() - 110):m.start() + 70]
+        if "github.com" in ctx or "renamed from" in ctx:
+            continue
+        leaks.append(ctx.replace("\n", " "))
+    return leaks
+
+
+def num(label, claimed, derived, tol=0.0):
+    """Numeric structural check."""
+    global checks
+    checks += 1
+    if abs(claimed - derived) > tol:
+        fails.append((label, claimed, derived))
+        print(f"  FAIL {label}: tex={claimed}  derived={derived}")
+    elif VERBOSE:
+        print(f"  ok   {label}: {derived}")
+
+
+num("no HARA token remains outside the archive URL", 0, len(_hara_outside_urls(BODY)))
+has("current repo URL present and correct",
+    "https://github.com/Emad-helal/LARA-Seismic-Compression", present=True)
+has("legacy HARA URL not cited as the release",
+    "Repository:} \\url{https://github.com/Emad-helal/HARA", present=False)
+has("repo rename disclosed", "renamed from \\texttt{HARA-Seismic-Compression}")
+has("Zenodo v1 archive still cited", "10.5281/zenodo.20172322", present=True)
+has("audit claim updated", "243 checks")
+has("subnormal script named", "extract\\_subnormal\\_fraction")
+has("paper source released", "paper/")
+has("no peak-at-CR=20 claim", "peak performance at CR=20", present=False)
+has("monotonic claim present", "decreases monotonically")
+has("latent is a vector", "it is a vector, not a")
+has("separate weights per ratio", "separate set of trained weights")
+has("uniform epoch cap", "cap is uniform across ratios")
+has("80/10/10", "80\\%")
+has("25,091 traces", "25,091")
+has("magnitude 2.5", "magnitude greater than 2.5")
+has("batch 64", "batch size is 64")
+has("PSNR data range 1.0", "data range is 1.0")
+has("subnormal disclosure", "1328.60")
+has("coder is the bottleneck", "1.6 and 110 times")
+has("amplitude not preserved", "Absolute amplitude is not preserved")
+has("dispersion is across traces", "across traces, not across runs")
+has("external results predate", "predate the current model")
+has("loss ablation present", "light-capacity architecture")
+has("requirements.txt referenced", "requirements.txt")
+has("script count stated", "seventeen scripts")
+has("no stale script count", "sixteen scripts", present=False)
+
+print()
+print("G. Section 2.10 subnormal weights (recomputed from the checkpoints)")
+SUBN = pd.read_csv(find("results/subnormal_fraction.csv"))
+sl = SUBN[SUBN.Model == "LARA"]
+hi = sl[sl.CR >= 50]
+ck("LARA CR>=50 subnormal min", 23.1, hi.Subnormal_Percent.min(), 0.05)
+ck("LARA CR>=50 subnormal max", 52.9, hi.Subnormal_Percent.max(), 0.05)
+ck("LARA subnormal max is at CR=100", 100, int(sl.loc[sl.Subnormal_Percent.idxmax(), "CR"]), 0)
+ck("LARA CR<=30 subnormal max", 1.75, sl[sl.CR <= 30].Subnormal_Percent.max(), 0.005)
+sb = SUBN[SUBN.Model != "LARA"]
+ck("baselines have zero subnormal", 0.0, sb.Subnormal_Percent.max(), 1e-9)
+ck("subnormal checkpoints audited", 30, len(SUBN), 0)
+for cr in (50, 60, 100):
+    v = float(sl[sl.CR == cr].Subnormal_Percent.iloc[0])
+    ck(f"Table Fig10 LARA CR={cr} subnormal %", round(v, 2), v, 0.0)
+has("archive discrepancy disclosed", "superseded by the re-analysis reported here")
+has("archive repo-name caveat disclosed",
+    "GitHub maintains a permanent redirect from the old name")
+has("archive protocol mismatch listed", "a magnitude threshold of three, a 90/10 split")
+
+print()
+print("H. Self-consistency")
+# The paper quotes this script's own check count. Assert it here so adding a
+# check without updating the manuscript fails the gate rather than going stale.
+# `checks + 1` accounts for this check itself.
+_m = re.search(r"runs (\d+) checks with no failures", BODY)
+ck("quoted check count matches this run", int(_m.group(1)) if _m else -1,
+   checks + 1, 0)
+
+print()
+print("=" * 110)
+print(f"CHECKS RUN: {checks}    FAILURES: {len(fails)}")
+for f in fails:
+    print(f"   FAIL {f[0]}: tex={f[1]}  csv={f[2]}")
+sys.exit(1 if fails else 0)

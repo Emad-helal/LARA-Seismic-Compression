@@ -1,0 +1,18 @@
+# Store everything as LF in the repository so a clone on Linux, macOS or
+# Windows produces identical bytes. Git's default on Windows would otherwise
+# rewrite the working copy to CRLF and make diffs noisy across platforms.
+* text=auto eol=lf
+
+*.py    text eol=lf
+*.ipynb text eol=lf
+*.csv   text eol=lf
+*.txt   text eol=lf
+*.md    text eol=lf
+*.tex   text eol=lf
+*.bib   text eol=lf
+*.cls   text eol=lf
+*.eps   text eol=lf
+
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
