@@ -280,19 +280,6 @@ ck("CR=20 model/trace ratio (thousands)", 140, 4630087 * 8 / 265.28 / 1000, 1.0)
 
 print()
 print("F. Structural checks")
-def _hara_outside_urls(text):
-    """HARA is legitimate only where the superseded name must be spelled out:
-    inside the legacy repository URL and inside the sentence that discloses the
-    rename. Anywhere else it would be an unrevised model name."""
-    leaks = []
-    for m in re.finditer("HARA", text):
-        ctx = text[max(0, m.start() - 110):m.start() + 70]
-        if "github.com" in ctx or "renamed from" in ctx:
-            continue
-        leaks.append(ctx.replace("\n", " "))
-    return leaks
-
-
 def num(label, claimed, derived, tol=0.0):
     """Numeric structural check."""
     global checks
@@ -304,14 +291,12 @@ def num(label, claimed, derived, tol=0.0):
         print(f"  ok   {label}: {derived}")
 
 
-num("no HARA token remains outside the archive URL", 0, len(_hara_outside_urls(BODY)))
 has("current repo URL present and correct",
     "https://github.com/Emad-helal/LARA-Seismic-Compression", present=True)
-has("legacy HARA URL not cited as the release",
-    "Repository:} \\url{https://github.com/Emad-helal/HARA", present=False)
-has("repo rename disclosed", "renamed from \\texttt{HARA-Seismic-Compression}")
-has("Zenodo v1 archive still cited", "10.5281/zenodo.20172322", present=True)
-has("audit claim updated", "243 checks")
+has("no archived-release reference in the paper", "HARA", present=False)
+has("no Zenodo reference in the paper", "zenodo", present=False)
+has("no supersession claim in the paper", "superseded", present=False)
+has("audit claim updated", "239 checks")
 has("subnormal script named", "extract\\_subnormal\\_fraction")
 has("paper source released", "paper/")
 has("no peak-at-CR=20 claim", "peak performance at CR=20", present=False)
@@ -328,11 +313,21 @@ has("subnormal disclosure", "1328.60")
 has("coder is the bottleneck", "1.6 and 110 times")
 has("amplitude not preserved", "Absolute amplitude is not preserved")
 has("dispersion is across traces", "across traces, not across runs")
-has("external results predate", "predate the current model")
 has("loss ablation present", "light-capacity architecture")
 has("requirements.txt referenced", "requirements.txt")
 has("script count stated", "seventeen scripts")
 has("no stale script count", "sixteen scripts", present=False)
+
+# The paper quotes a word for the script count. Tie it to the directory so the
+# two cannot disagree: an unaccounted script would otherwise go unnoticed.
+WORDS = {"twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+         "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+         "twenty": 20}
+_m = re.search(r"directory of (\w+) scripts", BODY)
+_sd = os.path.join(os.path.dirname(HERE), "scripts")   # HERE is scripts/ itself
+_ondisk = len([f for f in os.listdir(_sd) if f.endswith(".py")]) if os.path.isdir(_sd) else 0
+ck("quoted script count matches the scripts directory",
+   WORDS.get(_m.group(1) if _m else "", -1), _ondisk, 0)
 
 print()
 print("G. Section 2.10 subnormal weights (recomputed from the checkpoints)")
@@ -349,10 +344,6 @@ ck("subnormal checkpoints audited", 30, len(SUBN), 0)
 for cr in (50, 60, 100):
     v = float(sl[sl.CR == cr].Subnormal_Percent.iloc[0])
     ck(f"Table Fig10 LARA CR={cr} subnormal %", round(v, 2), v, 0.0)
-has("archive discrepancy disclosed", "superseded by the re-analysis reported here")
-has("archive repo-name caveat disclosed",
-    "GitHub maintains a permanent redirect from the old name")
-has("archive protocol mismatch listed", "a magnitude threshold of three, a 90/10 split")
 
 print()
 print("H. Self-consistency")

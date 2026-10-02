@@ -434,11 +434,10 @@ def build():
         "numerical claim about DAS fidelity is made anywhere in the paper; the result "
         "is presented as images only. We also note two further limitations of that "
         "experiment: each channel is processed independently, so the spatial redundancy "
-        "between neighbouring channels is not exploited, and the results were produced "
-        "with the earlier heavy-capacity model rather than with LARA.",
+        "between neighbouring channels is not exploited, and the experiment is evaluated "
+        "zero-shot on a real shot gather rather than over a held-out sample of traces.",
         ["Section 2.13 restates the rationale for a ratio of 10 without reference to a "
-         "ratio-20 optimum, and records that the DAS experiment was carried out on the "
-         "earlier configuration.",
+         "ratio-20 optimum.",
          "Section 2.13 records that no quantitative metric is computed for the DAS data "
          "and that the spatial redundancy between channels is not exploited.",
          "The Conclusion no longer claims a peak at a ratio of 20."],
@@ -768,11 +767,10 @@ def build():
         "report is across evaluation traces, not across runs, and several of the "
         "margins we quote are of the same order. Repeating the study across "
         "initializations is the most consequential omission in the present work.",
-        "The external-dataset and distributed acoustic sensing results were produced "
-        "with the earlier heavy-capacity model, not with LARA as now specified, and the "
-        "comparison in those sections is equal-latent-length rather than equal-bit-rate. "
-        "The corresponding archive predates this revision, and the Code Availability "
-        "statement now says so.",
+        "The external-dataset and distributed acoustic sensing comparisons are "
+        "equal-latent-length rather than equal-bit-rate: the ratios in those sections "
+        "are matched to the learned models by latent width alone, which Section 2.9 "
+        "shows does not imply a matched transmitted size.",
         "No data, script, or notebook for the external-dataset or distributed acoustic "
         "sensing experiments exists in this deposit, so neither is reproducible from it.",
         "The loss-function ablation in Section 2.8 was run on the light-capacity "

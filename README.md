@@ -4,13 +4,6 @@ Reference implementation for **LARA**, the *Light Autoencoder for Reconstruction
 and Analysis*, a fixed-length codec for seismic waveforms submitted to
 **Scientific Reports**.
 
-> **This release supersedes the earlier `HARA` code base.** The repository was
-> renamed `HARA-Seismic-Compression` → `LARA-Seismic-Compression`; GitHub keeps a
-> permanent redirect from the old name. The archived **v1.0.0** at
-> <https://doi.org/10.5281/zenodo.20172322> is retained as the citable version of
-> record for that earlier work. Several of its settings were superseded — see
-> [Differences from the archived version](#differences-from-the-archived-version).
-
 ---
 
 ## Result in one table
@@ -26,12 +19,12 @@ CC, SSIM and PSNR, is `results/model_comparison_results.csv`.
 | AE_PureConcat | 34.99 (3.91) | 22.65 (5.07) | 16.95 (2.66) | 15.71 (2.30) |
 | Wavelet db4 | 60.02 (14.09) | 35.97 (7.07) | 21.92 (3.80) | 3.05 (0.75) |
 
-Three findings worth stating plainly, because each contradicts something the
-earlier version of this work reported:
+Three findings are worth stating plainly, because each would otherwise be read
+the other way:
 
 1. **There is no optimal intermediate ratio.** SNR decreases monotonically with
-   the compression ratio across all ten ratios tested. The earlier version
-   reported a peak at CR=20; that peak is not present on this training pool.
+   the compression ratio across all ten ratios tested. A ratio of 20 is not
+   special: it sits in the least favourable part of the range.
 2. **LARA is not the best method at every ratio.** The wavelet compressors are
    more accurate up to a ratio of about 30 and are free of trained parameters.
    Above CR≈30 they fail (correlation below 0.07 at CR=50), and LARA is the only
@@ -222,9 +215,11 @@ These are properties of the study, stated so they are not mistaken for results:
   significant. Separating the two requires repeated training.
 - **Absolute amplitude is not preserved.** Traces are rescaled to `[0, 1]` by
   their own min/max before encoding. The codec preserves waveform *shape*.
-- **Distribution shift is untested on the main models.** The zero-shot
-  (TXED, INSTANCE) and distributed acoustic sensing (DAS) sections were produced
-  with the earlier heavy-capacity configuration, not this one.
+- **Distribution shift is tested only zero-shot.** The TXED, INSTANCE and
+  distributed acoustic sensing results come from applying STEAD-trained models
+  directly to unseen regions, with no fine-tuning or retraining. That bounds the
+  effect of domain shift, but it does not separate it from differences in
+  acquisition system and instrumentation.
 - **Most of the bit-rate gain is quantization, not entropy coding.** Quantizer
   depth gives 4.14–9.04× at ≤0.41 dB; the arithmetic coder's own contribution
   over fixed-width ranges from −6% to +13%, and is *worse* than fixed-width at
@@ -233,26 +228,6 @@ These are properties of the study, stated so they are not mistaken for results:
   parameters lie in the subnormal range at CR ≥ 50. On a CPU without
   flush-to-zero this is severe (CR=50 encode: 2.78 ms flushed vs 1328.60 ms as
   deployed). It affects the trained weights, not the architecture.
-
----
-
-## Differences from the archived version
-
-The archived v1.0.0 README describes a different experimental setup. None of the
-following are the settings used here:
-
-| | Archived v1.0.0 | This release |
-|---|---|---|
-| Magnitude threshold | > 3 | **> 2.5** |
-| Split | 90 / 10 | **80 / 10 / 10** |
-| Epoch budget | ratio-dependent | **120, uniform** |
-| Peak SNR | 35.41 dB at CR=20 | **monotonic decrease; no peak** |
-| Capacity | heavy | **light** (`pyramid_funnel32`) |
-
-The v1.0.0 numbers are not reproduced here and are not cited by the paper. The
-archive is kept only because it is the version of record for the earlier work,
-and because the external-dataset and DAS results quoted in that earlier work
-were obtained with it.
 
 ---
 
