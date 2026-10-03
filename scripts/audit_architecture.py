@@ -464,7 +464,12 @@ def main():
         hasf("figure script states which ratios its level lengths apply to",
              "level lengths shown for CR")
         ck("rendered figure is newer than the script that draws it",
-           True, os.path.getmtime(_fig_eps) >= os.path.getmtime(_fig_py))
+           True, (os.path.getmtime(_fig_eps)
+                   >= os.path.getmtime(_fig_py) - 60))
+           # A fresh clone rewrites both files with the checkout time, so mtimes
+           # carry no information there and would fail spuriously.  The one-minute
+           # tolerance ignores that case while still catching an edited script
+           # that was never re-run.
 
     print()
     print("E. Self-consistency")
