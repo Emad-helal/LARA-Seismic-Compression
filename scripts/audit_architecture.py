@@ -283,6 +283,22 @@ def main():
            rows[cr]["Lf"], rows[cr]["T"], 0)
     has("no claim that the pooled length follows the code",
         r"the pooled length follows the code length", present=False)
+    # The funnel pilot reports a difference of exactly zero at CR = 2, 3 and 5.
+    # That is only true because the two arms coincide there, so assert the
+    # coincidence rather than trusting the reported zero.
+    for cr in (2, 3, 5):
+        _m = LARA(cr, input_len=INPUT_LEN, variant=VARIANT).eval()
+        _naive = min(1500 // cr, 188 if cr <= 30 else 94)
+        ck("min() guard does not bind at CR=%d" % cr, False, _m.T < _naive)
+        ck("T equals min(code, L_f) at CR=%d, so both arms coincide" % cr,
+           _naive, min(_m.T, _naive), 0)
+    for cr in (10, 20, 100):
+        _m = LARA(cr, input_len=INPUT_LEN, variant=VARIANT).eval()
+        ck("min() guard does bind at CR=%d, so the arms differ there" % cr,
+           True, _m.T > min(1500 // cr, 188 if cr <= 30 else 94))
+    has("B threshold stated as 32 at and above CR 10", r"It is 32 for ratios of 10 and above, and 16 below")
+    has("B threshold not presented as tuned", r"carried over unchanged")
+    has("pilot funnel ablation section present", r"\label{subsec:funnel-ablation}")
     has("funnel does not switch off below CR=10", r"does not switch off below a ratio of 10")
 
     print()
