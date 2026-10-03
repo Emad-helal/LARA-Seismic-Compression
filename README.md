@@ -58,7 +58,8 @@ LARA-Seismic-Compression/
 │   ├── build_reviewer_response_docx.py       # letter responding to the reviewers
 │   ├── fix_bench_csv_units_27092026.py       # unit harmonisation for the cost CSVs
 │   ├── treemanifest.py                       # directory inventory
-│   └── audit_numbers.py                      # re-derives every claim in the paper
+│   └── audit_numbers.py                      # re-derives every result claim
+│   └── audit_architecture.py                 # checks the model description in 1.1
 ├── results/                                  # the CSVs the paper is audited against
 ├── figures/                                  # corrected and newly added figures
 ├── paper/
@@ -151,16 +152,40 @@ This is the part we would ask a reviewer to run first.
 python scripts/audit_numbers.py
 ```
 
-It re-derives **243 quantitative claims** — every value in the results tables,
+It re-derives **240 quantitative claims** — every value in the results tables,
 the prose, and the analysis sections — from the CSVs in `results/`, and exits
 non-zero if any of them disagrees with `paper/main.tex`. On this release:
 
 ```
-CHECKS RUN: 243    FAILURES: 0
+CHECKS RUN: 240    FAILURES: 0
 ```
 
 The paper quotes this count, and the script asserts that the quoted number still
 matches its own run, so the two cannot drift apart silently.
+
+There is a second script, for the description of the model rather than its
+results:
+
+```bash
+python scripts/audit_architecture.py
+```
+
+It instantiates the released `LARA` class at every ratio on the sweep and
+compares the tensor shapes it actually produces with the channel widths,
+temporal lengths and symbol definitions stated in Section 1.1 — 136 checks:
+
+```
+CHECKS RUN: 136    FAILURES: 0
+```
+
+This exists because architecture prose drifts in a way result files cannot
+detect. The manuscript once stated the channel width entering the bottleneck as
+256 and 512 where the model produces 128 and 256, and wrote the bottleneck input
+as a fixed stage index that the conditional encoder block invalidates. Neither
+error appears in any CSV, so neither was visible to `audit_numbers.py`. This
+script needs PyTorch, which the notebooks already depend on; where PyTorch is
+absent it reports that it is skipping and exits successfully, so the script above
+stays runnable on a bare NumPy/pandas install.
 
 The checks this enforces include:
 
