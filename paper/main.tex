@@ -110,7 +110,7 @@ The encoder mapping is expressed as
 \begin{equation}
     z = f_{\text{encoder}}(x; \theta_e)
 \end{equation}
-where $\theta_e = \{ W_i, b_i \}_{i=1}^{N}$ are the learnable parameters, and z is the latent representation.
+where $\theta_e$ is the learnable parameter set of the encoder and $z$ is the latent code.
 
 \begin{figure}[!t]
 \centering
@@ -124,7 +124,7 @@ The encoder begins with a one-dimensional convolutional layer with kernel size k
 \begin{equation}
 h_1 = \varphi\!\left(\mathrm{BN}(W_0 \ast x + b_0)\right)
 \end{equation}
-where $W_0$ and $b_0$ are the learnable kernel and bias, * denotes convolution, BN is batch normalization, and $\varphi(.)$ is the Exponential Linear Unit (ELU). The role of this initial convolution is to extract low-level temporal features such as impulsive onsets and short-term oscillations. Batch normalization (BN) is applied immediately after the convolution to standardize the feature distribution, followed by the Exponential Linear Unit (ELU) activation function, chosen for its ability to mitigate vanishing gradients while maintaining negative values. A channel attention module follows this stem, so the reweighting described below is applied before any further downsampling.
+where $W_0$ and $b_0$ are the learnable kernel and bias, $h_1$ is the output of the stem, * denotes convolution, BN is batch normalization, and $\varphi(.)$ is the Exponential Linear Unit (ELU). The role of this initial convolution is to extract low-level temporal features such as impulsive onsets and short-term oscillations. Batch normalization (BN) is applied immediately after the convolution to standardize the feature distribution, followed by the Exponential Linear Unit (ELU) activation function, chosen for its ability to mitigate vanishing gradients while maintaining negative values. A channel attention module follows this stem, so the reweighting described below is applied before any further downsampling.
 
 The encoder then applies three residual blocks, each of which halves the temporal resolution while doubling the channel width: 32 to 64 and 750 to 375 samples, 64 to 128 and 375 to 188 samples, and, where the compression ratio demands it, 128 to 256 and 188 to 94 samples. The third block is a conditional component and is instantiated only when $\mathrm{CR} > 30$; the resulting channel width entering the bottleneck is therefore 128 for $\mathrm{CR} \leq 30$ and 256 for $\mathrm{CR} > 30$, in the sense of the number of feature maps. We denote this final encoder output by $h_{f}$ and its temporal length by $L_{f}$, so that $L_{f}$ is 188 samples when two residual blocks are instantiated and 94 when three are.
 
@@ -147,7 +147,7 @@ Ratio range & Residual blocks & $L_{f}$ & $B$ & $T$ & $BT$ & Code $1500/\mathrm{
 The encoder thus emits
 
 \begin{equation}
-z = f_{\text{enc}}\!\left(W_{p}\,\mathrm{AAP}\big(\varphi(W_{b} \ast h_{f}))\right) \in \mathbb{R}^{\,1500/\mathrm{CR}},
+z = W_{p}\,\mathrm{AAP}\big(\varphi(W_{b} \ast h_{f})\big) \in \mathbb{R}^{\,1500/\mathrm{CR}},
 \end{equation}
 
 where $W_{b}$ is the $1\times1$ bottleneck kernel that reduces the feature maps to $B$ channels, $\mathrm{AAP}$ the adaptive average pooling to $T$, and $W_{p}$ the projection onto the code.
@@ -163,7 +163,7 @@ The defining feature of the residual block is the skip connection, which perform
 y = \varphi\!\Big(\mathrm{BN}(W_2 \ast \mathrm{BN}(W_1 \ast x))\Big) + S(x),
 \end{equation}
 
-where $W_1$ and $W_2$ are the bias-free convolutional kernels, BN is batch normalization, $\ast$ denotes the convolution operation, $\varphi(.)$ is the ELU activation, and $S(x)$ is the skip connection. The activation therefore acts on the residual branch only, and the two branches are summed after the second normalization. When the stride is 2, or when the input and output channel counts differ, $S$ cannot be the identity and is instead a learned one-dimensional convolution with kernel size 1 followed by batch normalization; the block is not shape-valid without it. This ensures that the block learns a residual mapping, improving gradient flow and avoiding feature degradation.
+where $W_1$ and $W_2$ are the bias-free convolutional kernels, BN is batch normalization, $\ast$ denotes the convolution operation, $\varphi(.)$ is the ELU activation, and $S(x)$ is the skip connection, so that $y$ is the output of the block. The activation therefore acts on the residual branch only, and the two branches are summed after the second normalization. When the stride is 2, or when the input and output channel counts differ, $S$ cannot be the identity and is instead a learned one-dimensional convolution with kernel size 1 followed by batch normalization; the block is not shape-valid without it. This ensures that the block learns a residual mapping, improving gradient flow and avoiding feature degradation.
 
 To further enhance the representational power of the network, a channel attention mechanism is integrated into each residual block. This module adaptively recalibrates channel-wise feature responses by modeling interdependencies between channels, allowing the network to selectively emphasize informative features and suppress less useful ones.
 
@@ -173,7 +173,7 @@ An integral addition to the residual block is the channel attention mechanism. T
 a = \sigma\Big( W_4 \, \delta\big( W_3 \, \mathrm{GAP}(x) + b_3 \big) + b_4 \Big)
 \end{equation}
 
-where $\delta(.)$ is the ReLU activation, $\sigma(.)$ is the sigmoid function, and GAP denotes global average pooling, and $W_3$, $b_3$, $W_4$, $b_4$ are the weights and biases of the bottleneck layers. These weights are applied elementwise to the input features:
+where $\delta(.)$ is the ReLU activation, $\sigma(.)$ is the sigmoid function, and GAP denotes global average pooling, and $W_3$, $b_3$, $W_4$, $b_4$ are the weights and biases of the bottleneck layers. These weights are applied to the input features with $\odot$, the elementwise product, giving the attended features $x'$:
 \begin{equation}
 x' = x \odot a
 \end{equation}
@@ -187,13 +187,13 @@ The decoder is deliberately not a mirror of the encoder, and we state this becau
 \ell_k = \mathrm{round}\!\left(T\, r^{(k+1)/6}\right), \qquad k = 1, \dots, 6,
 \end{equation}
 
-with $\ell_6 = 1500$, and the level computes $\mathrm{BN}\big(W_k \ast U_{k}(h_{k-1})\big)$ followed by the ELU. A two-layer refinement head then produces the output, first a convolution from 64 to 32 channels with kernel size 5, then a convolution from 32 to 1 channel with kernel size 15 followed by a sigmoid, which confines the reconstruction to $[0,1]$:
+with $\ell_6 = 1500$. Writing $h_{k}$ for the feature map entering level $k$, $U_{k}$ for the nearest-neighbour upsampling that lifts it to length $\ell_{k}$, and $W^{\mathrm{dec}}_{k}$ for that level's bias-free kernel, the level computes $\mathrm{BN}\big(W^{\mathrm{dec}}_{k} \ast U_{k}(h_{k-1})\big)$ followed by the ELU, so $h_{6}$ is the last of these maps. A two-layer refinement head then produces the output: a convolution from 64 to 32 channels with kernel size 5, which we write $W_{\text{ref}} \ast\,\cdot + b_{\text{ref}}$, followed by a convolution from 32 to 1 channel with kernel size 15, which we write $W_{\text{out}} \ast\,\cdot + b_{\text{out}}$, and then a sigmoid, which confines the reconstruction to $[0,1]$:
 
 \begin{equation}
 \hat{x} = \sigma\!\left(W_{\text{out}} \ast \varphi\!\left(W_{\text{ref}} \ast h_{6} + b_{\text{ref}}\right) + b_{\text{out}}\right).
 \end{equation}
 
-The complete decoder function is therefore $\hat{x} = f_{\text{decoder}}(z; \theta_{d})$, and the combined encoder-decoder mapping implements the end-to-end autoencoder
+The complete decoder function is therefore $\hat{x} = f_{\text{decoder}}(z; \theta_{d})$, where $\theta_{d}$ is the learnable parameter set of the decoder, and the combined encoder-decoder mapping implements the end-to-end autoencoder
 
 \begin{equation}
 \hat{x} = f_{\text{decoder}}\big(f_{\text{encoder}}(x; \theta_{e}); \theta_{d}\big).
@@ -244,10 +244,10 @@ All methods are assessed on reconstruction quality, and the reconstruction error
 The first metric is the signal-to-noise ratio \cite{oppenheim1997signals}, evaluated on each trace as
 \begin{equation}
 \label{eq:snr}
-\mathrm{SNR}_i = 10 \, \log_{10} \frac{\frac{1}{L}\sum_{j=1}^{L} x_{ij}^{2}}
-                                          {\frac{1}{L}\sum_{j=1}^{L} (x_{ij} - \hat{x}_{ij})^{2}} ,
+\mathrm{SNR}_t = 10 \, \log_{10} \frac{\frac{1}{L}\sum_{j=1}^{L} x_{tj}^{2}}
+                                          {\frac{1}{L}\sum_{j=1}^{L} (x_{tj} - \hat{x}_{tj})^{2}} ,
 \end{equation}
-and the value reported for a given model and ratio is the arithmetic mean of $\mathrm{SNR}_i$ over the evaluation traces. We stress that this is a mean of per-trace decibel values and not the decibel of a pooled error, and that the two are not interchangeable: the former gives every trace equal weight, whereas the latter is dominated by the noisiest traces. Our quoted figures are therefore systematically lower than a pooled-error definition would produce, and we consider the per-trace form the more appropriate choice for this application, since a codec that fails on a minority of traces is not usable even if its pooled error is small.
+where $t$ indexes the evaluation traces, $j$ the $L = 1500$ samples of each, and $x_{tj}$ is the $j$-th sample of trace $t$. The value reported for a given model and ratio is the arithmetic mean of $\mathrm{SNR}_t$ over the evaluation traces. We stress that this is a mean of per-trace decibel values and not the decibel of a pooled error, and that the two are not interchangeable: the former gives every trace equal weight, whereas the latter is dominated by the noisiest traces. Our quoted figures are therefore systematically lower than a pooled-error definition would produce, and we consider the per-trace form the more appropriate choice for this application, since a codec that fails on a minority of traces is not usable even if its pooled error is small.
 
 The second metric is the peak signal-to-noise ratio \cite{jahne2005digital},
 \begin{equation}
@@ -258,10 +258,10 @@ where the data range is 1.0 because the traces are rescaled to $[0,1]$. We state
 The third metric is the correlation coefficient \cite{bendat2011random},
 \begin{equation}
 \mathrm{CC} =
-\frac{\sum_{i=1}^{L} (x_i - \bar{x}) (\hat{x}_i - \bar{\hat{x}})}
-     {\sqrt{\sum_{i=1}^{L} (x_i - \bar{x})^2} \, \sqrt{\sum_{i=1}^{L} (\hat{x}_i - \bar{\hat{x}})^2}} ,
+\frac{\sum_{j=1}^{L} (x_j - \bar{x}) (\hat{x}_j - \bar{\hat{x}})}
+     {\sqrt{\sum_{j=1}^{L} (x_j - \bar{x})^2} \, \sqrt{\sum_{j=1}^{L} (\hat{x}_j - \bar{\hat{x}})^2}} ,
 \end{equation}
-which measures waveform shape without regard to amplitude scaling and is the metric we regard as most directly relevant to phase identification and cross-correlation analysis.
+where the bars denote the means of the trace and its reconstruction over the same $L$ samples. This measures waveform shape without regard to amplitude scaling and is the metric we regard as most directly relevant to phase identification and cross-correlation analysis.
 
 The fourth is the structural similarity index \cite{wang2006modern}. We use the standard windowed form, applied to the flattened trace with a uniform window and a data range of 1.0, so that the local statistics of the numerator and denominator are evaluated in a neighbourhood rather than over the whole record:
 \begin{equation}
@@ -269,13 +269,13 @@ The fourth is the structural similarity index \cite{wang2006modern}. We use the 
 \frac{(2 \mu_x \mu_{\hat{x}} + C_1)(2 \operatorname{cov}(x, \hat{x}) + C_2)}
      {(\mu_x^2 + \mu_{\hat{x}}^2 + C_1)(\sigma_x^2 + \sigma_{\hat{x}}^2 + C_2)} .
 \end{equation}
-The second numerator term involves the covariance of the two windows, not a product of standard deviations. SSIM was formulated for natural images, and the perceptual interpretation of its value does not transfer to a seismic trace; we use it because the windowed formulation rewards agreement of local waveform structure, which is the property we are interested in, and we report the correlation alongside it so that no conclusion rests on SSIM alone.
+Here $\mu_x$ and $\mu_{\hat{x}}$ are the local means of the two windows, $\sigma_x$ and $\sigma_{\hat{x}}$ their local standard deviations, $\operatorname{cov}$ the local covariance between them, and $C_1 = (0.01)^{2}$ and $C_2 = (0.03)^{2}$ the stabilising constants, which follow from the data range of 1.0 stated above. The second numerator term involves the covariance of the two windows, not a product of standard deviations. SSIM was formulated for natural images, and the perceptual interpretation of its value does not transfer to a seismic trace; we use it because the windowed formulation rewards agreement of local waveform structure, which is the property we are interested in, and we report the correlation alongside it so that no conclusion rests on SSIM alone.
 
 Error metrics are the mean squared and mean absolute errors \cite{james2013introduction},
 \begin{equation}
-\mathrm{MSE} = \frac{1}{N} \sum_{i=1}^{N} (x_i - \hat{x}_i)^2,
+\mathrm{MSE} = \frac{1}{L} \sum_{j=1}^{L} (x_j - \hat{x}_j)^2,
 \qquad
-\mathrm{MAE} = \frac{1}{N} \sum_{i=1}^{N} \left| x_i - \hat{x}_i \right| ,
+\mathrm{MAE} = \frac{1}{L} \sum_{j=1}^{L} \left| x_j - \hat{x}_j \right| ,
 \end{equation}
 the first weighting large errors quadratically and the second linearly. The arithmetic complexity, latency, and memory of each model are reported separately in Section~\ref{subsec:cost}.
 
@@ -812,7 +812,7 @@ The code that produced every result in this paper is released under the MIT Lice
     \item \textbf{\texttt{paper/}} holds the \LaTeX{} source of this article, so that the claims described next can be checked against the text they support.
 \end{itemize}
 
-\noindent \textbf{Verification of the reported numbers.} The script \texttt{audit\_numbers.py} re-derives every quantitative claim in this paper from the result files and exits with a non-zero status if any of them disagrees with the manuscript. It currently runs 428 checks with no failures, and it runs without modification from a fresh clone of the repository, since it locates both the result files and the article source relative to itself. A second script, \texttt{audit\_architecture.py}, checks the description of the model in Section~\ref{subsec:architecture} by instantiating the released \texttt{LARA} class at every ratio on the sweep and comparing the tensor shapes it produces with the widths, lengths and symbol definitions stated in the text. It runs 172 further checks, and it is the check that would have caught a misstated channel width in the encoder, since a value of that kind does not appear in any result file and therefore leaves the first script indifferent. It requires PyTorch, which the notebooks already depend on; where PyTorch is unavailable it reports that it is skipping the check and exits successfully, so the first script remains runnable on an installation with only NumPy and pandas. Four of the checks address failure modes specific to this revision. The compression ratio is verified by measuring the width of the latent of every trained model rather than by trusting the requested value, and a training run aborts if any model disagrees with its target. The analysis scripts embed the \texttt{LARA} class and check its SHA-256 digest against the trained architecture, so a result cannot be reported against a model that has drifted from the one that was trained. The bit-rate and loss-function scripts reload the published checkpoints, recompute the reported reconstruction quality, and compare it against the published table before any new figure is drawn. And because the subnormal-weight finding of Section~\ref{subsec:cost} depends only on the stored tensors and not on the hardware, it is recomputed directly from the published checkpoints by \texttt{extract\_subnormal\_fraction.py}, which reproduces the reported range without a GPU.
+\noindent \textbf{Verification of the reported numbers.} The script \texttt{audit\_numbers.py} re-derives every quantitative claim in this paper from the result files and exits with a non-zero status if any of them disagrees with the manuscript. It currently runs 428 checks with no failures, and it runs without modification from a fresh clone of the repository, since it locates both the result files and the article source relative to itself. A second script, \texttt{audit\_architecture.py}, checks the description of the model in Section~\ref{subsec:architecture} by instantiating the released \texttt{LARA} class at every ratio on the sweep and comparing the tensor shapes it produces with the widths, lengths and symbol definitions stated in the text. It runs 196 further checks, and it is the check that would have caught a misstated channel width in the encoder, since a value of that kind does not appear in any result file and therefore leaves the first script indifferent. It requires PyTorch, which the notebooks already depend on; where PyTorch is unavailable it reports that it is skipping the check and exits successfully, so the first script remains runnable on an installation with only NumPy and pandas. Four of the checks address failure modes specific to this revision. The compression ratio is verified by measuring the width of the latent of every trained model rather than by trusting the requested value, and a training run aborts if any model disagrees with its target. The analysis scripts embed the \texttt{LARA} class and check its SHA-256 digest against the trained architecture, so a result cannot be reported against a model that has drifted from the one that was trained. The bit-rate and loss-function scripts reload the published checkpoints, recompute the reported reconstruction quality, and compare it against the published table before any new figure is drawn. And because the subnormal-weight finding of Section~\ref{subsec:cost} depends only on the stored tensors and not on the hardware, it is recomputed directly from the published checkpoints by \texttt{extract\_subnormal\_fraction.py}, which reproduces the reported range without a GPU.
 
 The experiments are seeded throughout at 42, the two split stages are drawn at that seed, and the benchmark measurements were taken with deterministic cuDNN kernels.
 

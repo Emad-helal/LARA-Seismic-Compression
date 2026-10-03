@@ -265,8 +265,8 @@ def main():
 
     print()
     print("C. Symbol hygiene in the manuscript")
-    has("bottleneck input written h_f", r"\ast h_{f}")
-    has("no fixed stage index h_3 remains", r"h_{3}", present=False)
+    has("bottleneck input written h_f", "\\ast h_{f}")
+    has("no fixed stage index h_3 remains", "h_3", present=False)
     has("L_f and h_f defined before use", r"denote this final encoder output by $h_{f}$")
     has("encoder states 128 for CR<=30", r"128 for $\mathrm{CR} \leq 30$")
     has("encoder states 256 for CR>30", r"256 for $\mathrm{CR} > 30$")
@@ -299,6 +299,57 @@ def main():
     has("no channel-dimension digression remains", r"no channel dimension", present=False)
     has("no ratio-8-to-10 guard discussion remains",
         r"between 8 and 10", present=False)
+
+    # Every symbol used in a display equation must also be introduced in prose.
+    # The paper previously used U_k, h_6, W_ref, W_out, theta_d, h_1, y, x' and
+    # odot exactly once each, in their own equation, and defined none of them;
+    # theta_e was written as the generic set {W_i, b_i}, which collided with the
+    # specific W_0..W_4 tensors, and the decoder's level kernel W_k collided with
+    # the residual block's W_1 and W_2. Each is asserted below.
+    #
+    # NOTE: has() is a literal substring test, not a regex test, so these
+    # needles are the raw LaTeX source exactly as it appears in main.tex.
+    has("theta_e written without a generic weight set",
+        "{ W_i, b_i }", present=False)
+    has("no f_enc spelling of the encoder", "f_{\\text{enc}}", present=False)
+    has("encoder function spelled f_encoder", "f_{\\text{encoder}}")
+    has("decoder level kernel written W^dec_k", "W^{\\mathrm{dec}}_{k}")
+    has("no bare W_k decoder kernel", "W_k \\ast U_k", present=False)
+    has("upsampling operator U_k defined",
+        "$U_{k}$ for the nearest-neighbour upsampling")
+    has("h_k introduced as the map entering level k",
+        "$h_{k}$ for the feature map entering level $k$")
+    has("h_6 identified as the last decoder map",
+        "so $h_{6}$ is the last of these maps")
+    has("refinement head kernels named", "we write $W_{\\text{ref}} \\ast")
+    has("output head kernels named", "we write $W_{\\text{out}} \\ast")
+    has("theta_d defined",
+        "$\\theta_{d}$ is the learnable parameter set of the decoder")
+    has("stem output h_1 defined", "$h_1$ is the output of the stem")
+    has("block output y defined", "so that $y$ is the output of the block")
+    has("elementwise product and x' defined",
+        "\\odot$, the elementwise product, giving the attended features $x'$")
+
+    # Metric indices: t is the trace, j the sample, L the count. Previously i
+    # meant the trace in SNR and the sample in CC and MSE, and N meant both the
+    # parameter count and the sample count.
+    has("SNR indexed by the trace index t", "\\mathrm{SNR}_t = 10")
+    has("no SNR_i remains", "\\mathrm{SNR}_i", present=False)
+    has("no sum over i=1..N remains", "\\sum_{i=1}^{N}", present=False)
+    has("t and j introduced for the metrics",
+        "$t$ indexes the evaluation traces, $j$ the $L = 1500$ samples")
+    has("CC sums over the sample index j", "\\sum_{j=1}^{L} (x_j - \\bar{x})")
+    has("MSE sums over j to L",
+        "\\mathrm{MSE} = \\frac{1}{L} \\sum_{j=1}^{L}")
+    has("bars introduced as means", "the bars denote the means")
+    has("SSIM local statistics defined", "are the local means of the two windows")
+    has("SSIM stabilising constants valued",
+        "$C_1 = (0.01)^{2}$ and $C_2 = (0.03)^{2}$")
+    # sigma is the sigmoid in the attention block and the local standard
+    # deviation in SSIM. That is deliberate: SSIM keeps its conventional form
+    # and the two meanings are separated in words. Asserted, not renamed.
+    has("sigma disambiguated as local standard deviation",
+        "their local standard deviations")
 
     # T = L_f must hold at the three ratios where B is narrower too. The text
     # once claimed the pooled length followed the code length there, which
