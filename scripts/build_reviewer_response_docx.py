@@ -504,7 +504,7 @@ def build():
         "total at 200 traces and 5.2 % at a million, and that the coded size of the wavelet "
         "baselines was not measured, so the comparison is equal-latent-length and not "
         "rate-matched.",
-        ["Section 2.9 (new) with Table 4, the full ten-ratio rate table, and Figures 8 "
+        ["Section 2.9 (new) with Table 5, the full ten-ratio rate table, and Figures 8 "
          "and 9 showing the rate-distortion families and the coded rate against ratio.",
          "The quantity is renamed a latent storage ratio throughout, and the identity "
          "BPS = 32/CR for the uncoded code is stated where the ratio is defined.",
@@ -586,7 +586,7 @@ def build():
         "held fixed the experiment bounds the effect of the loss rather than establishing "
         "the best attainable loss for LARA. An identical ablation on LARA is scripted and "
         "scheduled.",
-        ["Section 2.8 (new) with Table 3, the seven-arm comparison at six ratios, and the "
+        ["Section 2.8 (new) with Table 4, the seven-arm comparison at six ratios, and the "
          "three findings on SNR, on correlation collapse, and on the NCC arm.",
          "The omitted diagnostics are named and the reason for each is given.",
          "The two implementation defects in the phase and arrival terms are disclosed in "
@@ -717,7 +717,14 @@ def build():
               "silently.")
     table(doc,
           ["Item", "Was", "Now"],
-          [["Model name", "HARA, with three different names in the text and tables",
+          [["Bottleneck design", "Never ablated: the released bottleneck and its widths were "
+            "asserted without a controlled comparison, and the low-ratio channel width was "
+            "presented as a considered choice",
+            "Section 2.7 now reports a pilot comparison that isolates the bottleneck, worth "
+            "0.24 dB on average and 0.34 dB at ratios of 10 and above; and Section 1.1 now "
+            "records that the channel width below a ratio of 10 was inherited from an earlier "
+            "configuration rather than tuned, and never tested against the wider value"],
+          ["Model name", "HARA, with three different names in the text and tables",
             "LARA throughout; the paper and the code now use one name"],
            ["Architecture", "Encoder widened to 64 channels, then 64-128-256-512; latent "
             "described as C x (1500/CR); decoder described as a symmetric mirror using "
@@ -797,10 +804,10 @@ def build():
               "recomputed from the published checkpoints without a GPU.")
     para(doc, "Two further scripts accompany this response. One re-derives every "
               "quantitative claim in the revised manuscript from the stored result files "
-              "and fails if any of them disagrees; it currently runs 240 checks with no "
+              "and fails if any of them disagrees; it currently runs 333 checks with no "
               "failures. The second instantiates the released model at every ratio on the "
               "sweep and compares the tensor shapes it produces with the channel widths, "
-              "temporal lengths and symbol definitions stated in Section 1.1, running 136 "
+              "temporal lengths and symbol definitions stated in Section 1.1, running 153 "
               "further checks. That second script was added after the channel width "
               "entering the bottleneck was found to be stated as 256 and 512 in the "
               "manuscript where the model produces 128 and 256, and where the bottleneck "
