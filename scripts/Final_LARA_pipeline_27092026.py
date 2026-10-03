@@ -14,12 +14,27 @@ Changes vs. HARA_compact.py
         stages   64->128->256->512     becomes  32-> 64->128->256
     A 1x1 "bottleneck" convolution (bot_conv) is added in front of the pool,
     which HARA did not have.
-  • BOTTLENECK PANEL: the single "Compressed Code (C, 1500/CR)" block becomes
-    the LARA bottleneck  z = Linear(B*T -> 1500/CR)  with **T = L**
-    (no min(latent, L) clamp), so the projection width stays wide as CR grows.
-    The latent is a FLAT vector, not a channel tensor.  The panel now shows only
-    the latent block and the CR table; the funnel spec lines (B, L = T, widths
-    6016 / 3008) were removed on request and live only in this docstring.
+  • BOTTLENECK PANEL: rebuilt.  The three stages the paper writes as
+    W_b -> AAP -> W_p are now drawn as blocks, running BOTTOM-TO-TOP.  The
+    encoder's last row sits at the bottom of its panel and the decoder's first
+    row at the top of its, so a chain drawn here has to rise between those two
+    heights if both arrows are to leave from a block instead of empty panel;
+    previously the Compress arrow left beside the attention block and the
+    Expand arrow left 2.3 units above the latent, so the flow read as if the
+    attention block produced the code.  Block 1 sits exactly on the encoder's
+    last row and block 3 exactly on the decoder's first row.  The panel is
+    widened to 4.30 (H_GAP cut 0.85 -> 0.62, so the figure grows ~3%) and the
+    CR table moves to a right-hand column beside the chain, because it cannot
+    fit in the vertical span the chain has to cover.  The latent block is folded
+    into block 3's subtitle, since it is the projection's output, not a stage.
+    The funnel arithmetic is restored: BT = 6016 at CR 10-30 and 3008 at CR 2-5
+    and 50-100, plus the note that B = 16 below CR 10 is inherited.
+    The latent block's old shape label is dropped, since the paper no longer
+    carries that description.  The encoder's stem row also now states the B
+    threshold and writes T = L_f rather than T = L.  The decoder's last level is
+    labelled "Level 6" rather than "Level N", and the panel notes that the level
+    lengths printed there are the T = 188 case, since at CR > 30 the third
+    encoder block halves T and every level but the last becomes shorter.
   • DECODER: HARA's "Upsample + Residual Block + Attention" chain is replaced by
     LARA's 6-LEVEL CHANNEL PYRAMID (nearest upsample + Conv1d k5 + BN + ELU,
     channels ramp 32 -> 64 and stay at the ceiling of 64), followed by a
@@ -73,9 +88,9 @@ PADH  = 0.38
 
 PANEL_H = 2*PADV + N*BH + (N-1)*VGAP
 
-LAT_W  = 3.20
+LAT_W  = 4.30
 IO_W   = 1.30; IO_H = 1.10
-H_GAP  = 0.85
+H_GAP  = 0.62
 IO_GAP = 0.55
 
 ENC_W  = BW + 2*PADH
@@ -234,7 +249,7 @@ ENC_ROWS = [
      'Channels: 128 → 256,   stride = 2   (CR > 30 only)',
      RED,    '(256, 94)', True),
     ('1×1 Conv  +  ELU  +  AdaptiveAvgPool1d',
-     '→  B = 32 channels,   length →  T = L',
+     '→  B = 32 (16 for CR < 10),   length →  T = L_f',
      PURPLE, '',          False),
 ]
 for i,(t1,t2,col,stag,dsh) in enumerate(ENC_ROWS):
@@ -246,53 +261,99 @@ for i,(t1,t2,col,stag,dsh) in enumerate(ENC_ROWS):
     if i < N-1: av(ECX, ROWS[i], ROWS[i+1]+BH, col)
 
 # ── Bottleneck panel geometry (needed before the Compress arrow can be placed) ──
-LBH = 0.88; LBW = LAT_W - 0.46
-LBX = LAT_X + 0.23
-# Vertically centre the bottleneck group (latent block + CR table) in the panel.
-# The base script anchored the block at the panel centre and hung the table below
-# it, which left the top half of the panel empty.  _LAT_GROUP_DROP is tuned for
-# the current table offset (ty0 = LBY - 0.62): if that gap changes, this must be
-# re-tuned by the same amount, or the group goes off-centre.
-_LAT_GROUP_DROP = 1.7625     # group centre sits this far below LBY
-LAT_CY = (PTOP + PBOT)/2 + _LAT_GROUP_DROP
-LBY    = LAT_CY - LBH/2
+# The panel is a pass-through.  The encoder's LAST row (the 1x1 conv) sits at the
+# BOTTOM of its panel and the decoder's FIRST row at the TOP of its, so a chain
+# drawn here has to run bottom-to-top between those two heights if both arrows
+# are to leave from a drawn block.  The CR table cannot fit in that vertical
+# span, so the panel is widened and the table moves to a right-hand column
+# beside the chain rather than below it.
+#
+# CH_BH equals BH so block 1 sits exactly on the encoder's last row and block 3
+# exactly on the decoder's first row; both arrows then leave at a block centre.
+CH_BH = BH
+CH_X  = LAT_X + 0.16; CH_W = 1.90     # chain column
+TBL_X = LAT_X + 2.20; TBL_W = 1.94    # CR table column
+
+COMPRESS_Y = ROWS[5] + BH/2           # encoder's last row  -> block 1 centre
+EXPAND_Y   = ROWS[0] + BH/2           # decoder's first row -> block 3 centre
+
+CH1_B = ROWS[5]
+CH3_B = ROWS[0]
+CH2_B = (PTOP + PBOT) / 2 - CH_BH / 2
+CH1_C = CH1_B + CH_BH / 2
+CH3_C = CH3_B + CH_BH / 2
+assert abs(CH1_C - COMPRESS_Y) < 1e-9, "Compress arrow must leave block 1's centre"
+assert abs(CH3_C - EXPAND_Y) < 1e-9, "Expand arrow must leave block 3's centre"
 
 # No text label on this arrow: the encoder's shape tags occupy the gap between the
 # two panels, and any label here would collide with them.
-ah(EBX+BW, LAT_X-0.06, LAT_CY, PURPLE, lw=2.4)
+ah(EBX+BW, LAT_X-0.06, COMPRESS_Y, PURPLE, lw=2.4)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # BOTTLENECK PANEL
-# Holds the transmitted latent and the CR -> latent-points table.  The funnel
-# arithmetic (B = BOTTLE_CHANNELS = 32, L = T, widths 6016 / 3008) was removed
-# from this panel on request; it now lives only in the code and this docstring.
+# The three stages the paper writes as W_b -> AAP -> W_p, drawn bottom-to-top so
+# that the Compress arrow leaves the encoder's last row and the Expand arrow
+# leaves the transmitted code, both landing on a block rather than on empty
+# panel.  The latent block of the previous revision is folded into block 3's
+# subtitle, since it is the output of the projection and not a separate stage.
 # ═══════════════════════════════════════════════════════════════════════════════
 panel(LAT_X, PBOT, LAT_W, PANEL_H, BG_LAT, PURPLE)
 ax.text(LCX, PTOP+0.14, 'Bottleneck',
         ha='center', va='bottom', fontsize=13, fontweight='bold', color=PURPLE)
 
-blk(LBX, LBY, LBW, LBH, 'Latent  z', 'Shape:  (1500 / CR,)   flat vector',
-    PURPLE, fs=10.0, ss=8.2, lw=2.4, r=0.20)
+CHAIN = [
+    (CH1_B, '1×1 Conv (W_b)', '→  B channels'),
+    (CH2_B, 'AvgPool1d',      '→  T = L_f'),
+    (CH3_B, 'Linear (W_p)',   '→  Latent z'),
+]
+for yb, t1, t2 in CHAIN:
+    blk(CH_X, yb, CH_W, CH_BH, t1, t2, PURPLE, fs=8.2, ss=6.8, lw=2.0, r=0.16)
 
-# CR -> latent points.  Unchanged: LARA and HARA both use 1500 // cr.
+# Upward arrows spanning the gap between stages, with the note laid over the
+# shaft on a panel-coloured patch so the two do not collide.
+av(CH_X + CH_W/2, CH1_B + CH_BH, CH2_B - 0.07, PURPLE, lw=2.0)
+av(CH_X + CH_W/2, CH2_B + CH_BH, CH3_B - 0.07, PURPLE, lw=2.0)
+
+def chain_note(y, txt):
+    ax.text(CH_X + CH_W/2, y, txt, ha='center', va='center',
+            fontsize=6.5, color=PURPLE, style='italic', zorder=8,
+            bbox=dict(boxstyle='round,pad=0.18', fc=BG_LAT, ec='none', alpha=0.95))
+
+chain_note((CH1_B + CH_BH + CH2_B) / 2, 'T independent of CR')
+chain_note((CH2_B + CH_BH + CH3_B) / 2, 'sets code length')
+
+# CR -> latent points.  Unchanged: the code length is 1500 // cr at every ratio.
 crs=[('CR','Pts'),
      ('2','750'),('3','500'),('5','300'),('10','150'),('15','100'),
      ('20','75'),('30','50'),('50','30'),('60','25'),('100','15')]
-cw=(LAT_W-0.30)/2; rh=0.255; tx0=LAT_X+0.15; ty0=LBY-0.62
-ax.text(LCX,ty0+0.10,'Latent lengths per CR:',ha='center',va='bottom',
-        fontsize=8.5,fontweight='bold',color=PURPLE)
+rh=0.225; TBL_BOT=8.95; n=len(crs)
+cw=TBL_W/2
+ax.text(TBL_X+TBL_W/2, TBL_BOT+(n-1)*rh+0.34, 'Latent lengths per CR:',
+        ha='center', va='bottom', fontsize=8.2, fontweight='bold', color=PURPLE)
 for ri,(a,b) in enumerate(crs):
     hdr=(ri==0); bg=PURPLE if hdr else ('#DDD5F5' if ri%2 else '#EDE9FA')
     tc='white' if hdr else DARK
     for ci,val in enumerate([a,b]):
-        rx=tx0+ci*cw; ry_=ty0-ri*rh-rh+0.02
-        ax.add_patch(FancyBboxPatch((rx,ry_),cw-0.04,rh-0.04,
+        rx=TBL_X+ci*cw; ry_=TBL_BOT+(n-1-ri)*rh
+        ax.add_patch(FancyBboxPatch((rx,ry_),cw-0.05,rh-0.03,
             boxstyle='round,pad=0.02,rounding_size=0.04',
             fc=bg,ec=PURPLE,lw=0.5 if not hdr else 0,zorder=3))
-        ax.text(rx+cw/2-0.02,ry_+rh/2-0.02,val,ha='center',va='center',
-                fontsize=8.2,fontweight='bold' if hdr else 'normal',color=tc)
+        ax.text(rx+cw/2-0.025,ry_+rh/2-0.02,val,ha='center',va='center',
+                fontsize=7.8,fontweight='bold' if hdr else 'normal',color=tc)
 
-ah(LAT_X+LAT_W+0.06, DBX, DEC_CY, PINK, lw=2.4, lbl='Expand')
+# The funnel claim: the projection width takes two values across the whole sweep,
+# so no ratio is given a narrower projection than its neighbours.  B = 16 below
+# CR 10 was inherited from an earlier configuration rather than tuned.
+for k, txt in enumerate([
+        'Linear maps BT to 1500/CR',
+        'BT = 6016 or 3008,',
+        'fixed, never narrows',
+        'B = 16 below CR 10',
+        'is inherited']):
+    ax.text(TBL_X+TBL_W/2, TBL_BOT-0.34-k*0.225, txt, ha='center', va='center',
+            fontsize=6.5, color=PURPLE, style='italic', zorder=6)
+
+ah(LAT_X+LAT_W+0.06, DBX, EXPAND_Y, PINK, lw=2.4, lbl='Expand')
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DECODER PANEL  —  6-level channel pyramid + refinement head
@@ -304,7 +365,7 @@ DEC_ROWS = [
     ('Upsample (nearest)  +  Conv1d (k = 5)','Level 1  —  Channels: 32 → 64,   len → 266',PINK),
     ('Upsample (nearest)  +  Conv1d (k = 5)','Level 2  —  Channels: 64,   len → 376',PINK),
     ('Upsample (nearest)  +  Conv1d (k = 5)','Level 3  —  Channels: 64,   len → 531',PINK),
-    ('Upsample (nearest)  +  Conv1d (k = 5)','Level N  —  Channels: 64,   len → 1500',PINK),
+    ('Upsample (nearest)  +  Conv1d (k = 5)','Level 6  —  Channels: 64,   len → 1500',PINK),
     ('Conv1d  (refine)  +  ELU','Channels: 64 → 32,   kernel = 5',TEAL),
     ('Conv1d  (Final)  +  Sigmoid','Channels: 32 → 1,   kernel = 15',TEAL),
 ]
@@ -323,6 +384,12 @@ ax.text(bx2+0.37,loop_mid-0.18,'levels',ha='center',va='center',
     fontsize=8.5,color='white',fontweight='bold',zorder=6)
 for yy in [loop_top+0.04,loop_bot-0.04]:
     ax.plot([DBX+BW+0.06,bx2],[yy,yy],color=PINK,lw=1.4,ls='--',zorder=4)
+
+# The target lengths printed above are the T = 188 case.  At CR > 30 the encoder
+# instantiates a third block, T drops to 94, and every level but the last is
+# shorter, so the ratios are stated rather than left to be inferred.
+ax.text(DCX, PBOT+0.30, 'level lengths shown for CR ≤ 30 (T = 188)',
+        ha='center', va='center', fontsize=7.4, color=PINK, style='italic', zorder=6)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DETAIL PANELS
@@ -491,10 +558,20 @@ ax.text(pB_x+pW/2, FOOT+0.32,
         ha='center', va='center', fontsize=10.0, fontweight='bold', color=ORANGE)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SAVE   →   <review>/updated_outputs/Figures/
+# SAVE   →   the manuscript's Figures/ folder
 # ═══════════════════════════════════════════════════════════════════════════════
+# The paper includes Figures/Final_LARA_pipeline.eps directly, so the figure is
+# written there.  It previously wrote to <review>/updated_outputs/Figures/ and
+# relied on a manual copy, which had already drifted out of date once.
 HERE    = os.path.dirname(os.path.abspath(__file__))
-OUT_DIR = os.path.join(os.path.dirname(HERE), 'updated_outputs', 'Figures')
+ROOT    = os.path.dirname(HERE)
+for _cand in (os.path.join(ROOT, 'Final_Scientific_Reports_Temp__27-7-2026', 'Figures'),
+             os.path.join(ROOT, 'Figures')):
+    if os.path.isdir(_cand):
+        OUT_DIR = _cand
+        break
+else:
+    OUT_DIR = os.path.join(ROOT, 'Figures')
 os.makedirs(OUT_DIR, exist_ok=True)
 
 out_png = os.path.join(OUT_DIR, 'Final_LARA_pipeline.png')
