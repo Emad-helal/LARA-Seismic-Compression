@@ -834,7 +834,7 @@ def build():
               "and fails if any of them disagrees; it currently runs 428 checks with no "
               "failures. The second instantiates the released model at every ratio on the "
               "sweep and compares the tensor shapes it produces with the channel widths, "
-              "temporal lengths and symbol definitions stated in Section 1.1, running 196 "
+              "temporal lengths and symbol definitions stated in Section 1.1, running 214 "
               "further checks. That second script was added after the channel width "
               "entering the bottleneck was found to be stated as 256 and 512 in the "
               "manuscript where the model produces 128 and 256, and where the bottleneck "
