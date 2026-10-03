@@ -14,27 +14,29 @@ Changes vs. HARA_compact.py
         stages   64->128->256->512     becomes  32-> 64->128->256
     A 1x1 "bottleneck" convolution (bot_conv) is added in front of the pool,
     which HARA did not have.
-  • BOTTLENECK PANEL: rebuilt.  The three stages the paper writes as
-    W_b -> AAP -> W_p are now drawn as blocks, running BOTTOM-TO-TOP.  The
-    encoder's last row sits at the bottom of its panel and the decoder's first
-    row at the top of its, so a chain drawn here has to rise between those two
-    heights if both arrows are to leave from a block instead of empty panel;
-    previously the Compress arrow left beside the attention block and the
+• BOTTLENECK PANEL: rebuilt.  The encoder's last row sits at the bottom of its
+    panel and the decoder's first row at the top of its, so the panel carries
+    the flow upward between those two heights and both arrows leave a block.
+    Block 1 sits exactly on the encoder's last row and block 2 exactly on the
+    decoder's first row.  Previously the Compress arrow left beside the
+    attention block, 5.8 units from the row it should have come from, and the
     Expand arrow left 2.3 units above the latent, so the flow read as if the
-    attention block produced the code.  Block 1 sits exactly on the encoder's
-    last row and block 3 exactly on the decoder's first row.  The panel is
-    widened to 4.30 (H_GAP cut 0.85 -> 0.62, so the figure grows ~3%) and the
-    CR table moves to a right-hand column beside the chain, because it cannot
-    fit in the vertical span the chain has to cover.  The latent block is folded
-    into block 3's subtitle, since it is the projection's output, not a stage.
-    The funnel arithmetic is restored: BT = 6016 at CR 10-30 and 3008 at CR 2-5
-    and 50-100, plus the note that B = 16 below CR 10 is inherited.
-    The latent block's old shape label is dropped, since the paper no longer
-    carries that description.  The encoder's stem row also now states the B
-    threshold and writes T = L_f rather than T = L.  The decoder's last level is
-    labelled "Level 6" rather than "Level N", and the panel notes that the level
-    lengths printed there are the T = 188 case, since at CR > 30 the third
-    encoder block halves T and every level but the last becomes shorter.
+    attention block produced the code.
+    The panel shows only the two stages the encoder panel does not: Linear
+    (W_p) and the code it produces.  The 1x1 conv and the adaptive pooling are
+    drawn once, in the encoder's last row; repeating them here said the same
+    thing twice.  W_p is the only step that sets the code length.
+    No funnel note is drawn: the projection widths, the statement that the
+    projection width is fixed, and the inherited B = 16 all appear in Sections
+    1.1 and 2.7.  The panel is widened to 4.30 (H_GAP cut 0.85 -> 0.62, so
+    the figure grows ~3%) to carry the CR table beside the chain.  The CR ->
+    points table keeps all ten ratios.  The latent block's old shape label is
+    dropped, since the paper no longer carries that description.  The encoder's
+    stem row also now states the B threshold and writes T = L_f rather than
+    T = L.  The decoder's last level is labelled "Level 6" rather than
+    "Level N", and the panel notes that the level lengths printed there are the
+    T = 188 case, since at CR > 30 the third encoder block halves T and every
+    level but the last becomes shorter.
   • DECODER: HARA's "Upsample + Residual Block + Attention" chain is replaced by
     LARA's 6-LEVEL CHANNEL PYRAMID (nearest upsample + Conv1d k5 + BN + ELU,
     channels ramp 32 -> 64 and stay at the ceiling of 64), followed by a
@@ -279,7 +281,6 @@ EXPAND_Y   = ROWS[0] + BH/2           # decoder's first row -> block 3 centre
 
 CH1_B = ROWS[5]
 CH3_B = ROWS[0]
-CH2_B = (PTOP + PBOT) / 2 - CH_BH / 2
 CH1_C = CH1_B + CH_BH / 2
 CH3_C = CH3_B + CH_BH / 2
 assert abs(CH1_C - COMPRESS_Y) < 1e-9, "Compress arrow must leave block 1's centre"
@@ -301,26 +302,18 @@ panel(LAT_X, PBOT, LAT_W, PANEL_H, BG_LAT, PURPLE)
 ax.text(LCX, PTOP+0.14, 'Bottleneck',
         ha='center', va='bottom', fontsize=13, fontweight='bold', color=PURPLE)
 
+# Only the two stages that the encoder panel does not already draw.  The 1x1
+# conv and the pooling appear once, in the encoder's last row, so repeating them
+# here would say the same thing twice; W_p is what turns the pooled feature map
+# into the code, and nothing upstream of it sets the code length.
 CHAIN = [
-    (CH1_B, '1×1 Conv (W_b)', '→  B channels'),
-    (CH2_B, 'AvgPool1d',      '→  T = L_f'),
-    (CH3_B, 'Linear (W_p)',   '→  Latent z'),
+    (CH1_B, 'Linear (W_p)', 'BT → 1500 / CR'),
+    (CH3_B, 'Latent  z',    'Shape: (1500 / CR,)'),
 ]
 for yb, t1, t2 in CHAIN:
     blk(CH_X, yb, CH_W, CH_BH, t1, t2, PURPLE, fs=8.2, ss=6.8, lw=2.0, r=0.16)
 
-# Upward arrows spanning the gap between stages, with the note laid over the
-# shaft on a panel-coloured patch so the two do not collide.
-av(CH_X + CH_W/2, CH1_B + CH_BH, CH2_B - 0.07, PURPLE, lw=2.0)
-av(CH_X + CH_W/2, CH2_B + CH_BH, CH3_B - 0.07, PURPLE, lw=2.0)
-
-def chain_note(y, txt):
-    ax.text(CH_X + CH_W/2, y, txt, ha='center', va='center',
-            fontsize=6.5, color=PURPLE, style='italic', zorder=8,
-            bbox=dict(boxstyle='round,pad=0.18', fc=BG_LAT, ec='none', alpha=0.95))
-
-chain_note((CH1_B + CH_BH + CH2_B) / 2, 'T independent of CR')
-chain_note((CH2_B + CH_BH + CH3_B) / 2, 'sets code length')
+av(CH_X + CH_W/2, CH1_B + CH_BH, CH3_B - 0.07, PURPLE, lw=2.0)
 
 # CR -> latent points.  Unchanged: the code length is 1500 // cr at every ratio.
 crs=[('CR','Pts'),
@@ -341,17 +334,11 @@ for ri,(a,b) in enumerate(crs):
         ax.text(rx+cw/2-0.025,ry_+rh/2-0.02,val,ha='center',va='center',
                 fontsize=7.8,fontweight='bold' if hdr else 'normal',color=tc)
 
-# The funnel claim: the projection width takes two values across the whole sweep,
-# so no ratio is given a narrower projection than its neighbours.  B = 16 below
-# CR 10 was inherited from an earlier configuration rather than tuned.
-for k, txt in enumerate([
-        'Linear maps BT to 1500/CR',
-        'BT = 6016 or 3008,',
-        'fixed, never narrows',
-        'B = 16 below CR 10',
-        'is inherited']):
-    ax.text(TBL_X+TBL_W/2, TBL_BOT-0.34-k*0.225, txt, ha='center', va='center',
-            fontsize=6.5, color=PURPLE, style='italic', zorder=6)
+# No funnel note is drawn here on purpose.  The projection widths (3008 and
+# 6016) are printed in the grid of Section 1.1, the statement that the
+# projection width is fixed is in the same subsection's prose, and the fact that
+# B = 16 below CR 10 was inherited rather than tuned is stated in Section 1.1
+# and again in Section 2.7.  None of it needs to be in the figure as well.
 
 ah(LAT_X+LAT_W+0.06, DBX, EXPAND_Y, PINK, lw=2.4, lbl='Expand')
 
