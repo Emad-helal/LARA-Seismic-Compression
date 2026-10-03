@@ -275,6 +275,16 @@ def main():
     has("grid is unnumbered (no caption)", r"Ratio range & Residual blocks",
         present=True)
 
+    # T = L_f must hold at the three ratios where B is narrower too. The text
+    # once claimed the pooled length followed the code length there, which
+    # contradicted the grid above it.
+    for cr in (2, 3, 5):
+        ck("T stays at L_f where B is narrowed, CR=%d" % cr,
+           rows[cr]["Lf"], rows[cr]["T"], 0)
+    has("no claim that the pooled length follows the code",
+        r"the pooled length follows the code length", present=False)
+    has("funnel does not switch off below CR=10", r"does not switch off below a ratio of 10")
+
     print()
     print("=" * 110)
     print("CHECKS RUN: %d    FAILURES: %d" % (checks, fails))
