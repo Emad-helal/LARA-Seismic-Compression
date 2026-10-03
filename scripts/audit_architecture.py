@@ -110,7 +110,7 @@ def load_lara():
         raise SystemExit("could not find the LARA class in %s" % nb_path)
     ns = {"torch": torch, "nn": nn}
     exec(compile("\n".join(src), os.path.basename(nb_path), "exec"), ns)
-    return ns["LARA"], torch, os.path.basename(nb_path)
+    return ns["LARA"], ns.get("EnhancedResidualBlock"), torch, os.path.basename(nb_path)
 
 
 def find(*candidates):
@@ -130,7 +130,7 @@ TEX = io.open(find("paper/main.tex",
 
 def main():
     try:
-        LARA, torch, nb_name = load_lara()
+        LARA, ERB, torch, nb_name = load_lara()
     except ImportError:
         print("torch is not installed; skipping the architecture audit.")
         print("It is listed in requirements.txt. Install it and re-run.")
@@ -288,8 +288,14 @@ def main():
     has("stem equation uses W_0", r"h_1 = \varphi\!\left(\mathrm{BN}(W_0 \ast x + b_0)\right)")
     has("attention equation uses W_3 and W_4",
         r"a = \sigma\Big( W_4 \, \delta\big( W_3 \, \mathrm{GAP}(x) + b_3 \big) + b_4 \Big)")
-    has("residual block keeps W_1 and W_2",
-        r"y = \varphi\!\Big(\mathrm{BN}(W_2 \ast \mathrm{BN}(W_1 \ast x))\Big) + S(x)")
+    # Pinned by extracting the equation rather than matching the whole line, so
+    # that a reformatting cannot silently turn this into a check that never
+    # tests anything.
+    _eq_y = [l for l in TEX.split("\n") if l.strip().startswith("y = \\varphi")]
+    ck("residual block equation is readable from the source", 1, len(_eq_y))
+    if _eq_y:
+        ck("residual block equation keeps W_1 and W_2", True,
+           ("W_1" in _eq_y[0] and "W_2" in _eq_y[0]))
     has("stem no longer claims W_1", r"\mathrm{BN}(W_1 \ast x + b_1)", present=False)
     has("attention no longer claims W_1", r"delta\big( W_1 \, \mathrm{GAP}(x) + b_1 \big)",
         present=False)
@@ -491,7 +497,62 @@ def main():
            # that was never re-run.
 
     print()
-    print("E. Self-consistency")
+    print("E. Residual block activation order, measured against the model")
+    # The manuscript printed  y = phi(BN(W2 * BN(W1 * x))) + S(x),  which puts the
+    # activation on the residual branch and takes the sum afterwards.  The trained
+    # block does the opposite: it activates after the first normalization, sums,
+    # and then activates the sum.  Rather than compare prose, run the block and
+    # see which of the two orderings it actually produces.
+    ck("EnhancedResidualBlock is available from the notebook", True, ERB is not None)
+    if ERB is not None and _eq_y:
+        torch.manual_seed(0)          # keep this check deterministic
+        _blk = ERB(8, 16, stride=2, use_attention=False).eval()
+        _x = torch.randn(1, 8, 64)
+        # the .clone() calls matter: nn.ELU is inplace=True, so without them
+        # evaluating one candidate would consume another candidate's tensor
+        with torch.no_grad():
+            _out = _blk(_x)
+            _f1 = _blk.elu(_blk.bn1(_blk.conv1(_x)).clone())
+            _f2 = _blk.bn2(_blk.conv2(_f1))
+            _r = _blk.shortcut(_x)
+            _on_sum = _blk.elu((_f2 + _r).clone())      # elu( f(x) + shortcut(x) )
+            _on_branch = _blk.elu(_f2.clone()) + _r     # elu( f(x) ) + shortcut(x)
+        ck("trained block activates the sum of the two branches", True,
+           bool(torch.allclose(_out, _on_sum, atol=1e-6)))
+        ck("the two candidate orderings are distinguishable", True,
+           not bool(torch.allclose(_on_sum, _on_branch, atol=1e-6)))
+
+        # Now read the ordering out of the printed equation itself and evaluate
+        # that, so the manuscript is tied to the model rather than to a literal
+        # string.  Two features decide it: whether the first normalization is
+        # followed by an activation, and whether the skip connection is added
+        # inside or outside the outer activation.
+        _inner = re.search(r"W_2\s*\\ast\s*\\varphi\s*\(\s*\\mathrm\{BN\}\s*\(\s*W_1",
+                           _eq_y[0])
+        _outer = re.search(r"\\varphi\\!\\Big\((.*)\\Big\)", _eq_y[0], re.S)
+        _sum_inside = bool(_outer) and ("S(x)" in _outer.group(1))
+        ck("printed equation exposes its outer activation", True, _outer is not None)
+        with torch.no_grad():
+            _h = _blk.elu(_blk.bn1(_blk.conv1(_x)).clone()) if _inner \
+                else _blk.bn1(_blk.conv1(_x))
+            _h = _blk.bn2(_blk.conv2(_h))
+            _rr = _blk.shortcut(_x)
+            _printed = _blk.elu((_h + _rr).clone()) if _sum_inside \
+                else _blk.elu(_h.clone()) + _rr
+        ck("the activation after the first normalization is what the source says",
+           True, _inner is not None)
+        ck("the skip connection is added inside the outer activation",
+           True, _sum_inside)
+        ck("printed Eq. 5 reproduces the trained block", True,
+           bool(torch.allclose(_out, _printed, atol=1e-6)))
+    has("text states the activation appears twice", "appears twice")
+    has("prose names the activation applied after the addition",
+        "after the two branches have been added")
+    has("bottleneck is described as ending the encoder",
+        "The encoder ends with a three-stage bottleneck")
+
+    print()
+    print("F. Self-consistency")
     # The paper quotes how many checks this script runs. That number drifted
     # from the paper to the response document once already, so pin it here.
     _m = re.search(r"It runs (\d+) further checks", TEX)
