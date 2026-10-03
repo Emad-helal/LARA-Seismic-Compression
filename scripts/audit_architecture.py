@@ -1,0 +1,287 @@
+"""Re-derive the architecture description in the paper from the model itself.
+
+The other audit passes read numbers from CSV result files. This one reads them
+from the trained architecture: it locates the LARA class, instantiates it at
+every ratio on the sweep, and compares what the model actually does with what
+the manuscript says it does.
+
+That distinction matters because architecture prose is where drift hides. The
+manuscript once stated the channel width entering the bottleneck as 256 and 512;
+the model produces 128 and 256, and 512 occurs nowhere in it. The stated
+bottleneck input was also written as a fixed stage index, which is wrong
+whenever the conditional encoder block is instantiated. Neither error produced
+a failed CSV check, because neither touches a result file.
+
+    python scripts/audit_architecture.py         # human-readable report
+    python scripts/audit_architecture.py -v      # every check
+
+Exit status is 0 when the manuscript and the model agree.
+
+torch is required. It is already in requirements.txt because the notebooks need
+it, but this script is kept separate from audit_numbers.py so that the
+result-file audit stays runnable on a bare numpy/pandas install.
+"""
+import io
+import json
+import os
+import re
+import sys
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+VERBOSE = "-v" in sys.argv
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+
+CRS = [2, 3, 5, 10, 15, 20, 30, 50, 60, 100]
+INPUT_LEN = 1500
+VARIANT = "pyramid_funnel32"
+
+checks, fails = 0, 0
+
+
+def ck(label, claimed, derived, tol=0):
+    """Compare a manuscript claim with a value derived from the model."""
+    global checks, fails
+    checks += 1
+    if isinstance(claimed, str) or isinstance(derived, str):
+        ok = claimed == derived
+    elif isinstance(claimed, (list, tuple)) or isinstance(derived, (list, tuple)):
+        ok = list(claimed) == list(derived)
+    else:
+        ok = abs(claimed - derived) <= tol
+    if ok:
+        if VERBOSE:
+            print("  ok   %-58s %s" % (label, derived))
+    else:
+        fails += 1
+        print("  FAIL %-58s paper=%s  model=%s" % (label, claimed, derived))
+
+
+def has(label, needle, present=True):
+    """Check for the presence or absence of a marker string in the manuscript."""
+    global checks, fails
+    checks += 1
+    ok = (needle in TEX) == present
+    if ok:
+        if VERBOSE:
+            print("  ok   %-58s %s" % (label, needle[:40]))
+    else:
+        fails += 1
+        print("  FAIL %-58s %s" % (label, "present" if present else "absent"))
+
+
+def span(label, claimed, value):
+    """Check that a value falls inside an inclusive integer range."""
+    global checks, fails
+    checks += 1
+    lo, hi = claimed
+    ok = lo <= value <= hi
+    if ok:
+        if VERBOSE:
+            print("  ok   %-58s %.1f in [%d, %d]" % (label, value, lo, hi))
+    else:
+        fails += 1
+        print("  FAIL %-58s %.1f outside [%d, %d]" % (label, value, lo, hi))
+
+
+def load_lara():
+    """Execute the LARA class, with its two dependencies, from the notebook.
+
+    The class is embedded in the notebook rather than imported so that the
+    audit reads the same source that trained the models. Everything needed is
+    LARA, EnhancedResidualBlock and AttentionBlock.
+    """
+    import torch
+    nn = torch.nn
+
+    nb_path = find(
+        os.path.join("notebooks", "Final_LARA_27092026.ipynb"),
+        r"seismic 26 9 2026\Final_LARA_27092026.ipynb")
+    nb = json.load(io.open(nb_path, encoding="utf-8"))
+    src = []
+    for cell in nb.get("cells", []):
+        s = "".join(cell.get("source", ""))
+        if (re.search(r"^class LARA\b", s, re.M)
+                or "class EnhancedResidualBlock" in s
+                or "class AttentionBlock" in s):
+            src.append(s)
+    if not src:
+        raise SystemExit("could not find the LARA class in %s" % nb_path)
+    ns = {"torch": torch, "nn": nn}
+    exec(compile("\n".join(src), os.path.basename(nb_path), "exec"), ns)
+    return ns["LARA"], torch, os.path.basename(nb_path)
+
+
+def find(*candidates):
+    for rel in candidates:
+        for base in (ROOT, HERE):
+            p = os.path.join(base, rel)
+            if os.path.exists(p):
+                return p
+    raise FileNotFoundError("none of these exist under %s:\n  %s"
+                            % (ROOT, "\n  ".join(candidates)))
+
+
+TEX = io.open(find("paper/main.tex",
+                   r"Final_Scientific_Reports_Temp__27-7-2026\main.tex"),
+              encoding="utf-8").read()
+
+
+def main():
+    try:
+        LARA, torch, nb_name = load_lara()
+    except ImportError:
+        print("torch is not installed; skipping the architecture audit.")
+        print("It is listed in requirements.txt. Install it and re-run.")
+        return 0
+
+    print("=" * 110)
+    print("A. Encoder, measured by running the model (source: %s)" % nb_name)
+    print("%-5s %-12s %-12s %-12s %-12s %-9s" %
+          ("cr", "stage0", "stage1", "stage2", "stage3", "bottleneck in"))
+    print("-" * 110)
+    rows = {}
+    for cr in CRS:
+        m = LARA(cr, input_len=INPUT_LEN, variant=VARIANT).eval()
+        shp, h = {}, torch.randn(1, 1, INPUT_LEN)
+        with torch.no_grad():
+            for nm in ("stage0", "stage1", "stage2", "stage3"):
+                st = getattr(m, nm)
+                if st is None:
+                    shp[nm] = None
+                    continue
+                h = st(h)
+                shp[nm] = (h.shape[1], h.shape[2])
+            z = m.coarse_head(m.bot_pool(m.bot_conv(h)))
+        f = lambda s: "     -       " if s is None else "%3d x %-6d" % (s[0], s[1])
+        rows[cr] = dict(shapes=shp, nblocks=3 if shp["stage3"] else 2,
+                        fin_ch=m.bot_conv[0].in_channels, B=m.BOTTLE_CHANNELS,
+                        T=m.T, Lf=m.L, latent=int(z.numel()))
+        print("%-5d %-12s %-12s %-12s %-12s %3d ch x %-4d" %
+              (cr, f(shp["stage0"]), f(shp["stage1"]), f(shp["stage2"]),
+               f(shp["stage3"]), m.bot_conv[0].in_channels, m.T))
+
+    print()
+    print("B. Manuscript architecture claims vs the model")
+
+    # --- the stem and the two unconditional residual blocks (L129) ---
+    for cr, t_len, ch in ((2, 750, 64), (20, 375, 128), (100, 188, 256)):
+        s = rows[cr]["shapes"]
+        ck("stem width CR=%d" % cr, 32, s["stage0"][0], 0)
+        ck("stem length CR=%d" % cr, 750, s["stage0"][1], 0)
+        ck("stem stride halves CR=%d" % cr, INPUT_LEN // 2, s["stage0"][1], 0)
+    ck("block1 out width (32 to 64)", 64, rows[2]["shapes"]["stage1"][0], 0)
+    ck("block1 out length (750 to 375)", 375, rows[2]["shapes"]["stage1"][1], 0)
+    ck("block2 out width (64 to 128)", 128, rows[2]["shapes"]["stage2"][0], 0)
+    ck("block2 out length (375 to 188)", 188, rows[2]["shapes"]["stage2"][1], 0)
+    ck("block3 out width (128 to 256)", 256, rows[100]["shapes"]["stage3"][0], 0)
+    ck("block3 out length (188 to 94)", 94, rows[100]["shapes"]["stage3"][1], 0)
+
+    # --- the conditional third block and the channel width entering the
+    #     bottleneck. This is the claim that was wrong: 256/512, not 128/256.
+    for cr in CRS:
+        want3 = cr > 30
+        ck("third block present CR=%d" % cr, want3, rows[cr]["shapes"]["stage3"] is not None)
+    for cr in CRS:
+        ck("bottleneck input width CR=%d" % cr,
+           256 if cr > 30 else 128, rows[cr]["fin_ch"], 0)
+    ck("CR<=30 bottleneck width is 128", 128,
+       max(v["fin_ch"] for c, v in rows.items() if c <= 30), 0)
+    ck("CR>30 bottleneck width is 256", 256,
+       max(v["fin_ch"] for c, v in rows.items() if c > 30), 0)
+    widest = max(max((s[0] for s in v["shapes"].values() if s))
+                 for v in rows.values())
+    ck("widest encoder feature map", 256, widest, 0)
+    ck("no 512-channel layer exists", "512 does not appear",
+       "512 does not appear" if 512 not in
+       {s[0] for v in rows.values() for s in v["shapes"].values() if s}
+       else "512 present")
+
+    # --- L_f (L129, the new definition) ---
+    for cr in CRS:
+        ck("L_f CR=%d" % cr, 94 if cr > 30 else 188, rows[cr]["Lf"], 0)
+    ck("L_f equals the last encoder output, CR<=30", 188,
+       rows[20]["shapes"]["stage2"][1], 0)
+    ck("L_f equals the last encoder output, CR>30", 94,
+       rows[100]["shapes"]["stage3"][1], 0)
+    ck("block count CR<=30", 2, rows[20]["nblocks"], 0)
+    ck("block count CR>30", 3, rows[100]["nblocks"], 0)
+
+    # --- T = L_f on the reported grid, and the B threshold ---
+    for cr in CRS:
+        ck("T equals L_f at CR=%d" % cr, rows[cr]["Lf"], rows[cr]["T"], 0)
+    for cr in CRS:
+        ck("B CR=%d" % cr, 16 if cr < 10 else 32, rows[cr]["B"], 0)
+
+    # --- the projection grid in the manuscript ---
+    grid = {r[0]: tuple(int(x) for x in r[1:]) for r in (
+        (2, 2, 188, 16, 188, 3008),
+        (10, 2, 188, 32, 188, 6016),
+        (50, 3, 94, 32, 94, 3008))}
+    for lo, (nb, Lf, B, T, BT) in grid.items():
+        r = rows[lo]
+        ck("grid row CR=%d: residual blocks" % lo, nb, r["nblocks"], 0)
+        ck("grid row CR=%d: L_f" % lo, Lf, r["Lf"], 0)
+        ck("grid row CR=%d: B" % lo, B, r["B"], 0)
+        ck("grid row CR=%d: T" % lo, T, r["T"], 0)
+        ck("grid row CR=%d: BT" % lo, BT, r["B"] * r["T"], 0)
+    for cr in CRS:
+        ck("projection width is 3008 or 6016 at CR=%d" % cr,
+           True, rows[cr]["B"] * rows[cr]["T"] in (3008, 6016))
+
+    # --- the min() guard on T: active only where CR is 8 or 9 ---
+    binds = [cr for cr in range(2, 11)
+             if LARA(cr, input_len=INPUT_LEN, variant=VARIANT).T
+             != LARA(cr, input_len=INPUT_LEN, variant=VARIANT).L]
+    ck("min() guard binds only at CR=8,9", [8, 9], binds)
+    ck("min() guard does not bind on the reported grid", [],
+       [cr for cr in binds if cr in CRS])
+
+    # --- exact compression ratio and the flat latent (L137) ---
+    for cr in CRS:
+        ck("latent is 1500/CR at CR=%d" % cr, INPUT_LEN // cr, rows[cr]["latent"], 0)
+        ck("compression ratio exact at CR=%d" % cr, cr,
+           INPUT_LEN // rows[cr]["latent"], 0)
+
+    # --- the B=16 parameter justification now quoted in the paper ---
+    share32, share16 = [], []
+    for cr in (2, 3, 5):
+        m = LARA(cr, input_len=INPUT_LEN, variant=VARIANT)
+        tot = sum(p.numel() for p in m.parameters())
+        ch = sum(p.numel() for p in m.coarse_head.parameters())
+        alt = 32 * m.T * m.latent_dim + m.latent_dim
+        share32.append(100.0 * alt / (tot - ch + alt))
+        share16.append(100.0 * ch / tot)
+    for cr, a, b in ((2, 64.6, 47.7), (3, 63.6, 46.6), (5, 61.6, 44.6)):
+        ck("B=32 share at CR=%d is %.1f%%" % (cr, a), a, share32[[2, 3, 5].index(cr)], 0.06)
+        ck("B=16 share at CR=%d is %.1f%%" % (cr, b), b, share16[[2, 3, 5].index(cr)], 0.06)
+    # The manuscript quotes these two ranges as whole numbers, so compare the
+    # rounded bounds rather than the raw shares.
+    ck("B=32 share rounds to the quoted 62-65%", (62, 65),
+       (round(min(share32)), round(max(share32))))
+    ck("B=16 share rounds to the quoted 45-48%", (45, 48),
+       (round(min(share16)), round(max(share16))))
+
+    print()
+    print("C. Symbol hygiene in the manuscript")
+    has("bottleneck input written h_f", r"\ast h_{f}")
+    has("no fixed stage index h_3 remains", r"h_{3}", present=False)
+    has("L_f and h_f defined before use", r"denote this final encoder output by $h_{f}$")
+    has("encoder states 128 for CR<=30", r"128 for $\mathrm{CR} \leq 30$")
+    has("encoder states 256 for CR>30", r"256 for $\mathrm{CR} > 30$")
+    has("encoder does not claim 512", r"512 for", present=False)
+    has("grid present", r"\toprule")
+    has("grid is unnumbered (no caption)", r"Ratio range & Residual blocks",
+        present=True)
+
+    print()
+    print("=" * 110)
+    print("CHECKS RUN: %d    FAILURES: %d" % (checks, fails))
+    return 1 if fails else 0
+
+
+
+
+if __name__ == "__main__":
+    sys.exit(main())

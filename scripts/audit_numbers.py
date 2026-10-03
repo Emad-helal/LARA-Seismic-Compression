@@ -296,7 +296,7 @@ has("current repo URL present and correct",
 has("no archived-release reference in the paper", "HARA", present=False)
 has("no Zenodo reference in the paper", "zenodo", present=False)
 has("no supersession claim in the paper", "superseded", present=False)
-has("audit claim updated", "239 checks")
+has("audit claim updated", "240 checks")
 has("subnormal script named", "extract\\_subnormal\\_fraction")
 has("paper source released", "paper/")
 has("no peak-at-CR=20 claim", "peak performance at CR=20", present=False)
@@ -315,8 +315,9 @@ has("amplitude not preserved", "Absolute amplitude is not preserved")
 has("dispersion is across traces", "across traces, not across runs")
 has("loss ablation present", "light-capacity architecture")
 has("requirements.txt referenced", "requirements.txt")
-has("script count stated", "seventeen scripts")
-has("no stale script count", "sixteen scripts", present=False)
+has("script count stated", "eighteen scripts")
+has("no stale script count", "seventeen scripts", present=False)
+has("architecture audit named", "audit\\_architecture")
 
 # The paper quotes a word for the script count. Tie it to the directory so the
 # two cannot disagree: an unaccounted script would otherwise go unnoticed.
