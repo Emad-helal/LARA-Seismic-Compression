@@ -296,12 +296,13 @@ has("current repo URL present and correct",
 has("no archived-release reference in the paper", "HARA", present=False)
 has("no Zenodo reference in the paper", "zenodo", present=False)
 has("no supersession claim in the paper", "superseded", present=False)
-has("audit claim updated", "521 checks")
+has("audit claim updated", "428 checks")
 has("subnormal script named", "extract\\_subnormal\\_fraction")
 has("paper source released", "paper/")
 has("no peak-at-CR=20 claim", "peak performance at CR=20", present=False)
 has("monotonic claim present", "decreases monotonically")
-has("latent is a vector", "it is a vector, not a")
+has("code length stated where the bit rate is derived",
+    "float32 vector of $1500/\\mathrm{CR}$ values")
 has("separate weights per ratio", "separate set of trained weights")
 has("uniform epoch cap", "cap is uniform across ratios")
 has("80/10/10", "80\\%")
@@ -344,107 +345,6 @@ ck("subnormal checkpoints audited", 30, len(SUBN), 0)
 for cr in (50, 60, 100):
     v = float(sl[sl.CR == cr].Subnormal_Percent.iloc[0])
     ck(f"Table Fig10 LARA CR={cr} subnormal %", round(v, 2), v, 0.0)
-
-print()
-print("I. Section 2.7 funnel ablation (pilot, re-derived from the v3 pilot CSVs)")
-PF = pd.read_csv(find("results/v3_funnel_results.csv"))
-PV = pd.read_csv(find("results/v3_valid_results.csv"))
-F32, F64 = "Pyramid_Funnel32", "Pyramid_Funnel64"
-B32, BHD = "Pyramid_B32", "Pyramid_B32_HD"
-GAE = "GeneralizedAutoencoder"
-CR10 = [2, 3, 5, 10, 15, 20, 30, 50, 60, 100]
-
-
-def _cell(df, model, cr, col):
-    return float(df[(df.Model == model) & (df.CR == cr)][col].iloc[0])
-
-
-# Parse the pilot table out of the manuscript, then compare every printed cell
-# with the CSV it claims to come from.
-_pt = BODY[BODY.index(r"\label{tab:funnel-pilot}"):]
-_pt = _pt[:_pt.index(r"\end{tabular}")]
-_parsed = {}
-for _line in _pt.splitlines():
-    if "\\\\" not in _line or "&" not in _line:
-        continue
-    _c = [x.strip() for x in _line.rsplit("\\\\", 1)[0].split("&")]
-    _nums = re.findall(r"\(?([0-9]+\.[0-9]+)\)?|\b([0-9]+)\b", " ".join(_c[1:]))
-    _flat = [a or b for a, b in _nums]
-    if len(_flat) == 6 and re.fullmatch(r"[0-9]+", _c[0]):
-        _parsed[int(_c[0])] = _flat
-ck("pilot table rows parsed", 10, len(_parsed), 0)
-
-for cr in CR10:
-    if cr not in _parsed:
-        ck(f"pilot table has a row for CR={cr}", "row present", "row MISSING")
-        continue
-    got = _parsed[cr]
-    ck(f"pilot Funnel32 SNR CR={cr}", round(_cell(PF, F32, cr, "SNR"), 2), float(got[0]), 0.0)
-    ck(f"pilot Funnel32 SSIM CR={cr}", round(_cell(PF, F32, cr, "SSIM"), 4), float(got[1]), 0.0)
-    ck(f"pilot B32 SNR CR={cr}", round(_cell(PV, B32, cr, "SNR"), 2), float(got[2]), 0.0)
-    ck(f"pilot B32 SSIM CR={cr}", round(_cell(PV, B32, cr, "SSIM"), 4), float(got[3]), 0.0)
-    _Lf = 188 if cr <= 30 else 94
-    _B = 32 if cr >= 10 else 16
-    ck(f"pilot BT released CR={cr}", _B * _Lf, int(got[4]), 0)
-    ck(f"pilot BT contracting CR={cr}", _B * min(1500 // cr, _Lf), int(got[5]), 0)
-
-_mean = BODY[BODY.index(r"\label{tab:funnel-pilot}"):]
-_mean = _mean[:_mean.index(r"\bottomrule")]
-for df, m, lbl, i_snr, i_ssim in ((PF, F32, "Funnel32", 0, 1), (PV, B32, "B32", 2, 3)):
-    _row = [l for l in _mean.splitlines() if l.strip().startswith("Mean")]
-    if not _row:
-        ck(f"pilot mean row present for {lbl}", "row present", "row MISSING")
-        continue
-    _n = re.findall(r"([0-9]+\.[0-9]+)", _row[0])
-    ck(f"pilot mean SNR {lbl}", round(float(np.mean([_cell(df, m, cr, "SNR") for cr in CR10])), 2),
-       float(_n[i_snr]), 0.0)
-    ck(f"pilot mean SSIM {lbl}", round(float(np.mean([_cell(df, m, cr, "SSIM") for cr in CR10])), 4),
-       float(_n[i_ssim]), 0.0)
-
-d = {cr: _cell(PF, F32, cr, "SNR") - _cell(PV, B32, cr, "SNR") for cr in CR10}
-ck("funnel gain, mean over all ten ratios", 0.24, round(float(np.mean(list(d.values()))), 2), 0.0)
-ck("funnel gain, mean over CR>=10", 0.34, round(float(np.mean([d[c] for c in d if c >= 10])), 2), 0.0)
-ck("funnel gain positive at every CR>=10", True, bool(all(d[c] > 0 for c in d if c >= 10)))
-ck("funnel gain largest at CR=20", 20, max(d, key=lambda c: d[c]), 0)
-ck("funnel gain at CR=20", 0.69, round(d[20], 2), 0.0)
-for cr in (2, 3, 5):
-    ck(f"funnel gain exactly zero at CR={cr}", 0.0, round(d[cr], 10), 0.0)
-
-
-def _m(df, mo, col):
-    return float(np.mean([_cell(df, mo, cr, col) for cr in CR10]))
-
-
-ck("Funnel64 mean SNR", 20.11, round(_m(PF, F64, "SNR"), 2), 0.0)
-ck("Funnel64 mean SSIM", 0.7407, round(_m(PF, F64, "SSIM"), 4), 0.0)
-ck("Funnel64 mean gradient error", 0.0196, round(_m(PF, F64, "GradL1"), 4), 0.0001)
-ck("Funnel64 params 40 percent above Funnel32", 40,
-   round(100 * (_m(PF, F64, "Parameter_Count") / _m(PF, F32, "Parameter_Count") - 1)), 0)
-ck("B32_HD mean SNR", 19.96, round(_m(PV, BHD, "SNR"), 2), 0.0)
-ck("B32_HD params 4 percent above B32", 4,
-   round(100 * (_m(PV, BHD, "Parameter_Count") / _m(PV, B32, "Parameter_Count") - 1)), 0)
-ck("Funnel32 better SNR than Funnel64", True, bool(_m(PF, F32, "SNR") > _m(PF, F64, "SNR")))
-ck("Funnel32 better SSIM than Funnel64", True, bool(_m(PF, F32, "SSIM") > _m(PF, F64, "SSIM")))
-ck("Funnel32 lower gradient error than Funnel64", True, bool(_m(PF, F32, "GradL1") < _m(PF, F64, "GradL1")))
-ck("Funnel64 projection would be 12032 columns", 12032, 64 * 188, 0)
-
-_dhi = float(np.mean([_cell(PF, F32, cr, "SNR") - _cell(PF, GAE, cr, "SNR")
-                      for cr in CR10 if cr >= 10]))
-ck("pilot deficit vs GAE at CR>=10", -0.06, round(_dhi, 2), 0.0)
-ck("pilot did not beat GAE at CR>=10", True, bool(_dhi < 0))
-
-ck("full pool: LARA ahead of GenAE at every ratio", 10,
-   int(sum(float(MAIN[(MAIN.Model == "LARA") & (MAIN.CR == c)].SNR.iloc[0])
-           > float(MAIN[(MAIN.Model == "GeneralizedAutoencoder") & (MAIN.CR == c)].SNR.iloc[0])
-           for c in CR10)), 0)
-
-has("pilot labelled as such", "pilot")
-has("pilot subset size stated", "2{,}000-trace")
-has("B threshold disclosed as inherited", "inherited rather than chosen")
-has("B=32 untested at low ratios", "never tested at those ratios")
-has("no claim B=32 would be better", "no claim about which value would be better")
-has("negative pilot result disclosed", "no variant of the light architecture exceeded")
-has("supersession stated", "supersede it")
 
 print()
 print("J. Section 2.8 loss-function ablation on LARA (re-derived from the released CSVs)")

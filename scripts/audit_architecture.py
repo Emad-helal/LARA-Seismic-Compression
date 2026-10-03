@@ -274,6 +274,31 @@ def main():
     has("grid present", r"\toprule")
     has("grid is unnumbered (no caption)", r"Ratio range & Residual blocks",
         present=True)
+    # W_1 was previously reused for the stem kernel, the first residual kernel
+    # and the first attention kernel. Each symbol must now name one tensor only,
+    # so each is asserted to appear in exactly one equation and its definition.
+    _paper = TEX
+    for _sym, _owner in (("W_0", "stem"), ("b_0", "stem"),
+                         ("W_1", "residual block"), ("W_2", "residual block"),
+                         ("W_3", "attention"), ("b_3", "attention"),
+                         ("W_4", "attention"), ("b_4", "attention"),
+                         ("W_{b}", "bottleneck"), ("W_{p}", "bottleneck")):
+        ck("symbol %s appears twice only: equation plus definition (%s)"
+           % (_sym, _owner), 2, len(re.findall(re.escape(_sym), _paper)))
+    has("stem equation uses W_0", r"h_1 = \varphi\!\left(\mathrm{BN}(W_0 \ast x + b_0)\right)")
+    has("attention equation uses W_3 and W_4",
+        r"a = \sigma\Big( W_4 \, \delta\big( W_3 \, \mathrm{GAP}(x) + b_3 \big) + b_4 \Big)")
+    has("residual block keeps W_1 and W_2",
+        r"y = \varphi\!\Big(\mathrm{BN}(W_2 \ast \mathrm{BN}(W_1 \ast x))\Big) + S(x)")
+    has("stem no longer claims W_1", r"\mathrm{BN}(W_1 \ast x + b_1)", present=False)
+    has("attention no longer claims W_1", r"delta\big( W_1 \, \mathrm{GAP}(x) + b_1 \big)",
+        present=False)
+    has("bottleneck symbols W_b and W_p are defined",
+        r"where $W_{b}$ is the $1\times1$ bottleneck kernel")
+    has("no flat-vector aside remains", r"single flat vector", present=False)
+    has("no channel-dimension digression remains", r"no channel dimension", present=False)
+    has("no ratio-8-to-10 guard discussion remains",
+        r"between 8 and 10", present=False)
 
     # T = L_f must hold at the three ratios where B is narrower too. The text
     # once claimed the pooled length followed the code length there, which
@@ -283,23 +308,31 @@ def main():
            rows[cr]["Lf"], rows[cr]["T"], 0)
     has("no claim that the pooled length follows the code",
         r"the pooled length follows the code length", present=False)
-    # The funnel pilot reports a difference of exactly zero at CR = 2, 3 and 5.
-    # That is only true because the two arms coincide there, so assert the
-    # coincidence rather than trusting the reported zero.
+    # T = min(code length, L_f) is what the code actually builds. The guard binds
+    # only for ratios of 10 and above, so T sits at L_f for CR = 2, 3 and 5. The
+    # paper does not discuss the unused ratios, but the behaviour is asserted
+    # here so the released implementation cannot drift from the stated T.
     for cr in (2, 3, 5):
         _m = LARA(cr, input_len=INPUT_LEN, variant=VARIANT).eval()
         _naive = min(1500 // cr, 188 if cr <= 30 else 94)
         ck("min() guard does not bind at CR=%d" % cr, False, _m.T < _naive)
-        ck("T equals min(code, L_f) at CR=%d, so both arms coincide" % cr,
-           _naive, min(_m.T, _naive), 0)
+        ck("T equals min(code, L_f) at CR=%d" % cr, _naive, min(_m.T, _naive), 0)
     for cr in (10, 20, 100):
         _m = LARA(cr, input_len=INPUT_LEN, variant=VARIANT).eval()
-        ck("min() guard does bind at CR=%d, so the arms differ there" % cr,
+        ck("min() guard binds at CR=%d" % cr,
            True, _m.T > min(1500 // cr, 188 if cr <= 30 else 94))
-    has("B threshold stated as 32 at and above CR 10", r"It is 32 for ratios of 10 and above, and 16 below")
-    has("B threshold not presented as tuned", r"carried over unchanged")
-    has("pilot funnel ablation section present", r"\label{subsec:funnel-ablation}")
+    has("B threshold stated as 32 at and above CR 10",
+        r"We use $B=32$ for compression ratios of 10 and above, and $B=16$ for ratios below 10")
+    has("B threshold not presented as tuned", r"inherited rather than chosen")
     has("funnel does not switch off below CR=10", r"does not switch off below a ratio of 10")
+
+    print()
+    print("D. Self-consistency")
+    # The paper quotes how many checks this script runs. That number drifted
+    # from the paper to the response document once already, so pin it here.
+    _m = re.search(r"It runs (\d+) further checks", TEX)
+    ck("quoted architecture check count matches this run",
+       int(_m.group(1)) if _m else -1, checks + 1, 0)
 
     print()
     print("=" * 110)

@@ -122,17 +122,15 @@ where $\theta_e = \{ W_i, b_i \}_{i=1}^{N}$ are the learnable parameters, and z 
 The encoder begins with a one-dimensional convolutional layer with kernel size k = 15, stride s = 2, and padding p = 7. This expands the input from a single channel to 32 feature channels while simultaneously halving the temporal resolution from 1500 to 750 samples:
 
 \begin{equation}
-h_1 = \varphi\!\left(\mathrm{BN}(W_1 \ast x + b_1)\right)
+h_1 = \varphi\!\left(\mathrm{BN}(W_0 \ast x + b_0)\right)
 \end{equation}
-where $W_1$ and $b_1$ are the learnable kernel and bias, * denotes convolution, BN is batch normalization, and $\varphi(.)$ is the Exponential Linear Unit (ELU). The role of this initial convolution is to extract low-level temporal features such as impulsive onsets and short-term oscillations. Batch normalization (BN) is applied immediately after the convolution to standardize the feature distribution, followed by the Exponential Linear Unit (ELU) activation function, chosen for its ability to mitigate vanishing gradients while maintaining negative values. A channel attention module follows this stem, so the reweighting described below is applied before any further downsampling.
+where $W_0$ and $b_0$ are the learnable kernel and bias, * denotes convolution, BN is batch normalization, and $\varphi(.)$ is the Exponential Linear Unit (ELU). The role of this initial convolution is to extract low-level temporal features such as impulsive onsets and short-term oscillations. Batch normalization (BN) is applied immediately after the convolution to standardize the feature distribution, followed by the Exponential Linear Unit (ELU) activation function, chosen for its ability to mitigate vanishing gradients while maintaining negative values. A channel attention module follows this stem, so the reweighting described below is applied before any further downsampling.
 
-The encoder then applies three residual blocks, each of which halves the temporal resolution while doubling the channel width: 32 to 64 and 750 to 375 samples, 64 to 128 and 375 to 188 samples, and, where the compression ratio demands it, 128 to 256 and 188 to 94 samples. The third block is a conditional component and is instantiated only when $\mathrm{CR} > 30$; the resulting channel width entering the bottleneck is therefore 128 for $\mathrm{CR} \leq 30$ and 256 for $\mathrm{CR} > 30$ in the sense of the number of feature maps, although, as described below, no channel dimension survives into the transmitted code. We denote this final encoder output by $h_{f}$ and its temporal length by $L_{f}$, so that $L_{f}$ is 188 samples when two residual blocks are instantiated and 94 when three are.
+The encoder then applies three residual blocks, each of which halves the temporal resolution while doubling the channel width: 32 to 64 and 750 to 375 samples, 64 to 128 and 375 to 188 samples, and, where the compression ratio demands it, 128 to 256 and 188 to 94 samples. The third block is a conditional component and is instantiated only when $\mathrm{CR} > 30$; the resulting channel width entering the bottleneck is therefore 128 for $\mathrm{CR} \leq 30$ and 256 for $\mathrm{CR} > 30$, in the sense of the number of feature maps. We denote this final encoder output by $h_{f}$ and its temporal length by $L_{f}$, so that $L_{f}$ is 188 samples when two residual blocks are instantiated and 94 when three are.
 
-The bottleneck has three stages: a convolution with kernel size 1 reduces the feature maps to $B$ channels, adaptive average pooling (AAP) \cite{lin2013network} reduces the temporal axis to a fixed length $T$, and a single linear projection maps the flattened result to the transmitted code. We set $T = L_{f}$, so $T$ is fixed by the encoder and does not depend on the compression ratio. Raising the ratio therefore shortens the transmitted code while leaving the pooled width, and with it the projection, unchanged. The code gets smaller; the layer that produces it does not.
+The bottleneck consists of three sequential stages. First, a convolution with a kernel size of 1 reduces the number of feature maps to $B$ channels. Next, adaptive average pooling (AAP) \cite{lin2013network} reduces the temporal dimension to a fixed length $T$. Finally, a single linear projection maps the resulting flattened representation to the transmitted latent code. We set $T=L_f$, which means that the temporal length of the pooled representation is determined by the encoder and remains independent of the compression ratio. Therefore, increasing the compression ratio reduces the dimensionality of the transmitted latent code while keeping the pooled representation and the projection layer unchanged. In other words, the latent code becomes more compact, whereas the layer responsible for generating it remains unchanged. This design is referred to as a \emph{filled funnel}. An alternative design would reduce the width of the projection layer as the compression ratio increases, causing the projection layer to become increasingly narrow at high compression ratios, particularly at a ratio of 100. Keeping the projection width fixed avoids this architectural imbalance and provides a consistent projection capacity across different compression ratios.
 
-We call this a \emph{filled funnel}. The natural alternative would be to let the projection narrow along with the code, which would leave it very little room to work with at a ratio of 100. Fixing its width removes that imbalance.
-
-$B$ is set separately. It is 32 for ratios of 10 and above, and 16 below. The low-ratio value was carried over unchanged from the light-capacity configuration used earlier in this work rather than tuned, so that the architecture at ratios of 2, 3 and 5 is identical to the one already validated there and no low-ratio result depends on a choice made for the high-ratio regime. Its effect is visible but secondary: with $B = 32$ those three models would place 62 to 65\% of their parameters in the single projection layer, against 45 to 48\% for $B = 16$. We have not tested $B = 32$ at those ratios, and we make no claim about which value would be better if it were. The resulting settings are:
+The number of bottleneck channels, $B$, is selected separately for different compression regimes. We use $B=32$ for compression ratios of 10 and above, and $B=16$ for ratios below 10.  This choice ensures that the architectures at compression ratios of 2, 3, and 5 remain identical to the previously validated configuration and that their results are not affected by a new architectural choice introduced for the high-compression regime. The choice of $B$ has a measurable but secondary effect on the parameter distribution. With $B=32$, the projection layer accounts for approximately 62--65\% of the total parameters at compression ratios of 2, 3, and 5, compared with approximately 45--48\% when $B=16$. The resulting configurations are summarized as follows:
 
 \begin{center}
 \begin{tabular}{lcccccc}
@@ -146,13 +144,13 @@ Ratio range & Residual blocks & $L_{f}$ & $B$ & $T$ & $BT$ & Code $1500/\mathrm{
 \end{tabular}
 \end{center}
 
-\noindent The projection width therefore takes only two values across the sweep, so no ratio is given a materially smaller projection than its neighbours. The implementation additionally caps $T$ at the code length, but that guard is active only for ratios between 8 and 10 and does not affect any of the ten ratios reported here. The output of the encoder is a single flat vector,
+The encoder thus emits
 
 \begin{equation}
 z = f_{\text{enc}}\!\left(W_{p}\,\mathrm{AAP}\big(\varphi(W_{b} \ast h_{f}))\right) \in \mathbb{R}^{\,1500/\mathrm{CR}},
 \end{equation}
 
-which contains exactly $1500/\mathrm{CR}$ real values. The compression ratio is therefore $\mathrm{CR} = 1500/(1500/\mathrm{CR})$ by construction, and we verify this for every trained model rather than assuming it. A further consequence, which we make explicit because it determines how the compression ratio should be read, is that $z$ has no channel dimension at all: it is a vector, not a $C \times (1500/\mathrm{CR})$ array, so the number of transmitted values is $1500/\mathrm{CR}$ and not $C \cdot (1500/\mathrm{CR})$.
+where $W_{b}$ is the $1\times1$ bottleneck kernel that reduces the feature maps to $B$ channels, $\mathrm{AAP}$ the adaptive average pooling to $T$, and $W_{p}$ the projection onto the code.
 
 \subsection{Residual Block and Channel Attention}
 \label{subsec:residual}
@@ -172,10 +170,10 @@ To further enhance the representational power of the network, a channel attentio
 An integral addition to the residual block is the channel attention mechanism. This module adaptively reweights each channel, allowing the network to focus on informative seismic features. The process begins with global average pooling (GAP), which compresses each channel into a scalar descriptor representing its global importance. This descriptor is passed through a bottleneck transformation consisting of a reduction convolution, ReLU activation, and an expansion convolution. The final sigmoid activation generates channel-wise weights a, defined as:
 
 \begin{equation}
-a = \sigma\Big( W_2 \, \delta\big( W_1 \, \mathrm{GAP}(x) + b_1 \big) + b_2 \Big)
+a = \sigma\Big( W_4 \, \delta\big( W_3 \, \mathrm{GAP}(x) + b_3 \big) + b_4 \Big)
 \end{equation}
 
-where $\delta(.)$ is the ReLU activation, $\sigma(.)$ is the sigmoid function, and GAP denotes global average pooling, and $W_1$, $b_1$, $W_2$, $b_2$ are the weights and biases of the bottleneck layers. These weights are applied elementwise to the input features:
+where $\delta(.)$ is the ReLU activation, $\sigma(.)$ is the sigmoid function, and GAP denotes global average pooling, and $W_3$, $b_3$, $W_4$, $b_4$ are the weights and biases of the bottleneck layers. These weights are applied elementwise to the input features:
 \begin{equation}
 x' = x \odot a
 \end{equation}
@@ -514,46 +512,6 @@ We draw two conclusions, and we state the second because it is not what the firs
 
 A final property of the design is worth recording because it affects the interpretation of the parameter results in Section~\ref{subsec:analysis}. The filled funnel does not switch off below a ratio of 10: $T = L_{f} = 188$ at CR = 2, 3, and 5, exactly as it is at every ratio up to 30, so the pooled length does not follow the shorter code at those ratios. What does change at CR = 10 is $B$, which rises from 16 to 32, so three of the ten points describe a slightly different network from the other seven. That threshold was inherited rather than chosen: the value below CR = 10 was left as it was so the low ratios would be served by an already validated architecture, and $B = 32$ was never tested at those ratios. This is visible as the small step in the LARA parameter count between CR=5 and CR=10, and it is the reason the SNR curve for this arm steps down more sharply between those two ratios than the other arms do.
 
-\subsubsection{Funnel Ablation, Reported as a Pilot}
-\label{subsec:funnel-ablation}
-
-The five arms above isolate the attention block, the residual connection and the channel width. None of them varies the bottleneck itself, so we report a further comparison here that does. It was run earlier than the study above, on a 2{,}000-trace subset of the same pool and with a shorter, pilot training budget, one run per arm; the results in Section~\ref{subsec:analysis} and Table~\ref{tab:main-results} come from the full pool under a uniform budget and supersede it wherever the two speak to the same question. We label it a pilot for that reason and do not combine its numbers with those of the main study.
-
-The comparison is between the released configuration and one alternative that differs in a single respect. Both hold the bottleneck channel width at $B = 32$ for every ratio of 10 and above, and both are the same network at ratios below 10. They differ only in the pooled length $T$: the released model holds it at $L_{f}$, whereas the alternative lets it contract to the code length. Everything else, including the data, the split, the seed and the training recipe, is identical.
-
-\begin{table}[!t]
-\centering
-\small
-\caption{Reconstruction quality of the released bottleneck against an otherwise identical variant that lets the pooled length follow the code length, from a 2{,}000-trace pilot. SNR is in dB and SSIM is unitless; $BT$ is the width of the projection that maps the pooled representation to the code. The two variants are the same network at CR = 2, 3 and 5, so the difference there is exactly zero by construction.}
-\label{tab:funnel-pilot}
-\begin{tabular}{lrrrrrr}
-\toprule
-& \multicolumn{2}{c}{Released, $T = L_{f}$} & \multicolumn{2}{c}{Contracting, $T = \min(1500/\mathrm{CR}, L_{f})$} & \multicolumn{2}{c}{Projection width} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
-$\mathrm{CR}$ & SNR & SSIM & SNR & SSIM & $BT$ released & $BT$ contracting \\
-\midrule
-2   & 27.08 & 0.9239 & 27.08 & 0.9239 & 3008 & 3008 \\
-3   & 27.04 & 0.9231 & 27.04 & 0.9231 & 3008 & 3008 \\
-5   & 25.89 & 0.9006 & 25.89 & 0.9006 & 3008 & 3008 \\
-10  & 21.07 & 0.7770 & 20.95 & 0.7772 & 6016 & 4800 \\
-15  & 19.06 & 0.7154 & 18.68 & 0.7089 & 6016 & 3200 \\
-20  & 17.89 & 0.6789 & 17.21 & 0.6623 & 6016 & 2400 \\
-30  & 16.66 & 0.6420 & 16.45 & 0.6440 & 6016 & 1600 \\
-50  & 16.07 & 0.6412 & 15.71 & 0.6333 & 3008 & 960  \\
-60  & 15.82 & 0.6347 & 15.47 & 0.6247 & 3008 & 800  \\
-100 & 15.46 & 0.6284 & 15.15 & 0.6221 & 3008 & 480  \\
-\midrule
-Mean & 20.20 & 0.7465 & 19.96 & 0.7420 & --- & --- \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Holding the pooled width fixed is worth 0.24~dB of mean SNR across the sweep and 0.34~dB averaged over the seven ratios of 10 and above, and the gain is positive at every one of them, reaching 0.69~dB at a ratio of 20. The mechanism is visible in the last two columns: where the contracting variant is squeezed to a few hundred columns the released variant retains three thousand, and the difference is largest where the squeeze is most severe. At ratios of 2, 3 and 5 the two are the same network, because $1500/\mathrm{CR}$ still exceeds $L_{f}$ there and the minimum never binds; that is why the difference is exactly zero and not merely small, and we prefer to state it that way rather than quote a rounding residual.
-
-Two further variants were rejected on the same pilot. Doubling the bottleneck width to 64 channels, and hence the projection to 12{,}032 columns, lowered mean SNR to 20.11~dB, lowered mean SSIM to 0.7407 and raised mean gradient error to 0.0196 from 0.0194, while raising the mean parameter count by 40\%. A variant adding a wider final decoder kernel at high ratios matched the contracting variant, at 19.96~dB, for 4\% more parameters. Both were dominated by the released configuration on quality and cost together, which is why neither appears in the paper.
-
-We record one negative result from this pilot. On the 2{,}000-trace subset no variant of the light architecture exceeded the Generalized Autoencoder at the higher ratios; the released configuration trailed it there by 0.06~dB on average. On the full pool that ordering reverses, and Table~\ref{tab:main-results} shows the released model ahead at every ratio, so the pilot understated rather than overstated the result. We report the pilot because it is the comparison that isolates the bottleneck, and we do not present it as a competitive result in its own right.
-
 \subsection{Loss-Function Ablation}
 \label{subsec:loss-ablation}
 
@@ -612,7 +570,7 @@ Two properties of the implementation further qualify the phase-aware arms. The p
 \subsection{Effective Bit Rate}
 \label{subsec:bitrate}
 
-The compression ratio used above counts the values in the latent code and says nothing about the number of bits those values occupy. Because the code is a float32 vector, the quantity that has actually been measured so far is a storage ratio: one 1500-sample source trace occupies 48,000 bits, or 32.0 bits per sample, and the code occupies 32.0 bits per sample divided by the ratio, with no coding gain whatsoever. We therefore report the end-to-end coded size, which requires three further steps. The code is quantized on a per-dimension uniform mid-tread quantizer at a bit depth chosen per ratio; the quantized symbols are compressed with an adaptive binary arithmetic coder driven only by the symbols of the trace being coded, so that no frequency table has to be transmitted; and the range of each quantizer dimension is calibrated on the training split alone and sent once per model. Every coded trace is decoded and compared against the quantized symbols before its rate is reported, so no figure in this section describes bits a decoder could not recover.
+The compression ratio used above counts the values in the latent code and says nothing about the number of bits those values occupy. Because the code is a float32 vector of $1500/\mathrm{CR}$ values, the quantity that has actually been measured so far is a storage ratio: one 1500-sample source trace occupies 48,000 bits, or 32.0 bits per sample, and the code occupies 32.0 bits per sample divided by the ratio, with no coding gain whatsoever. We therefore report the end-to-end coded size, which requires three further steps. The code is quantized on a per-dimension uniform mid-tread quantizer at a bit depth chosen per ratio; the quantized symbols are compressed with an adaptive binary arithmetic coder driven only by the symbols of the trace being coded, so that no frequency table has to be transmitted; and the range of each quantizer dimension is calibrated on the training split alone and sent once per model. Every coded trace is decoded and compared against the quantized symbols before its rate is reported, so no figure in this section describes bits a decoder could not recover.
 
 \begin{table}[!t]
 \centering
@@ -854,7 +812,7 @@ The code that produced every result in this paper is released under the MIT Lice
     \item \textbf{\texttt{paper/}} holds the \LaTeX{} source of this article, so that the claims described next can be checked against the text they support.
 \end{itemize}
 
-\noindent \textbf{Verification of the reported numbers.} The script \texttt{audit\_numbers.py} re-derives every quantitative claim in this paper from the result files and exits with a non-zero status if any of them disagrees with the manuscript. It currently runs 521 checks with no failures, and it runs without modification from a fresh clone of the repository, since it locates both the result files and the article source relative to itself. A second script, \texttt{audit\_architecture.py}, checks the description of the model in Section~\ref{subsec:architecture} by instantiating the released \texttt{LARA} class at every ratio on the sweep and comparing the tensor shapes it produces with the widths, lengths and symbol definitions stated in the text. It runs 136 further checks, and it is the check that would have caught a misstated channel width in the encoder, since a value of that kind does not appear in any result file and therefore leaves the first script indifferent. It requires PyTorch, which the notebooks already depend on; where PyTorch is unavailable it reports that it is skipping the check and exits successfully, so the first script remains runnable on an installation with only NumPy and pandas. Four of the checks address failure modes specific to this revision. The compression ratio is verified by measuring the width of the latent of every trained model rather than by trusting the requested value, and a training run aborts if any model disagrees with its target. The analysis scripts embed the \texttt{LARA} class and check its SHA-256 digest against the trained architecture, so a result cannot be reported against a model that has drifted from the one that was trained. The bit-rate and loss-function scripts reload the published checkpoints, recompute the reported reconstruction quality, and compare it against the published table before any new figure is drawn. And because the subnormal-weight finding of Section~\ref{subsec:cost} depends only on the stored tensors and not on the hardware, it is recomputed directly from the published checkpoints by \texttt{extract\_subnormal\_fraction.py}, which reproduces the reported range without a GPU.
+\noindent \textbf{Verification of the reported numbers.} The script \texttt{audit\_numbers.py} re-derives every quantitative claim in this paper from the result files and exits with a non-zero status if any of them disagrees with the manuscript. It currently runs 428 checks with no failures, and it runs without modification from a fresh clone of the repository, since it locates both the result files and the article source relative to itself. A second script, \texttt{audit\_architecture.py}, checks the description of the model in Section~\ref{subsec:architecture} by instantiating the released \texttt{LARA} class at every ratio on the sweep and comparing the tensor shapes it produces with the widths, lengths and symbol definitions stated in the text. It runs 172 further checks, and it is the check that would have caught a misstated channel width in the encoder, since a value of that kind does not appear in any result file and therefore leaves the first script indifferent. It requires PyTorch, which the notebooks already depend on; where PyTorch is unavailable it reports that it is skipping the check and exits successfully, so the first script remains runnable on an installation with only NumPy and pandas. Four of the checks address failure modes specific to this revision. The compression ratio is verified by measuring the width of the latent of every trained model rather than by trusting the requested value, and a training run aborts if any model disagrees with its target. The analysis scripts embed the \texttt{LARA} class and check its SHA-256 digest against the trained architecture, so a result cannot be reported against a model that has drifted from the one that was trained. The bit-rate and loss-function scripts reload the published checkpoints, recompute the reported reconstruction quality, and compare it against the published table before any new figure is drawn. And because the subnormal-weight finding of Section~\ref{subsec:cost} depends only on the stored tensors and not on the hardware, it is recomputed directly from the published checkpoints by \texttt{extract\_subnormal\_fraction.py}, which reproduces the reported range without a GPU.
 
 The experiments are seeded throughout at 42, the two split stages are drawn at that seed, and the benchmark measurements were taken with deterministic cuDNN kernels.
 
