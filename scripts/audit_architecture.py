@@ -457,12 +457,31 @@ def main():
              "EXPAND_Y   = ROWS[0] + BH/2")
         hasf("figure script asserts both arrows leave a block centre",
              "must leave block 1")
-        hasf("figure script draws the three bottleneck stages",
-             "(CH1_B, '1×1 Conv (W_b)'")
-        hasf("figure script draws the projection stage",
-             "(CH3_B, 'Linear (W_p)'")
         hasf("figure script states which ratios its level lengths apply to",
              "level lengths shown for CR")
+        # The bottleneck panel must not repeat what the encoder's last row
+        # already draws.  An earlier revision drew W_b and the pooling in both
+        # places, which said the same thing twice; W_p is the only stage the
+        # encoder panel does not show, so it is the only one that belongs here.
+        _cm = re.search(r"CHAIN = \[(.*?)\n\]", _fs, re.S)
+        ck("bottleneck chain list is readable from the script", True, _cm is not None)
+        _chain = _cm.group(1) if _cm else ""
+        hasf("bottleneck chain shows the projection", "(CH1_B, 'Linear (W_p)'")
+        hasf("bottleneck chain shows the code it produces", "(CH3_B, 'Latent  z'")
+        ck("bottleneck chain does not repeat the encoder's 1x1 conv",
+           False, "1×1 Conv" in _chain)
+        ck("bottleneck chain does not repeat the encoder's pooling",
+           False, "AvgPool1d" in _chain)
+        hasf("the encoder's last row still draws the conv and the pooling",
+             "AdaptiveAvgPool1d")
+        # The projection widths, the statement that the projection width is
+        # fixed, and the inherited B = 16 are all in Sections 1.1 and 2.7.  The
+        # figure carries none of them, so it cannot drift out of step with the
+        # prose by repeating it in a form nobody else checks.
+        hasf("figure carries no funnel note about the projection width",
+             "across the sweep", present=False)
+        hasf("figure carries no note about the inherited B = 16",
+             "is inherited", present=False)
         ck("rendered figure is newer than the script that draws it",
            True, (os.path.getmtime(_fig_eps)
                    >= os.path.getmtime(_fig_py) - 60))
