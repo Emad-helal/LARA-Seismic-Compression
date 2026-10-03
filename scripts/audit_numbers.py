@@ -296,7 +296,7 @@ has("current repo URL present and correct",
 has("no archived-release reference in the paper", "HARA", present=False)
 has("no Zenodo reference in the paper", "zenodo", present=False)
 has("no supersession claim in the paper", "superseded", present=False)
-has("audit claim updated", "333 checks")
+has("audit claim updated", "521 checks")
 has("subnormal script named", "extract\\_subnormal\\_fraction")
 has("paper source released", "paper/")
 has("no peak-at-CR=20 claim", "peak performance at CR=20", present=False)
@@ -313,7 +313,6 @@ has("subnormal disclosure", "1328.60")
 has("coder is the bottleneck", "1.6 and 110 times")
 has("amplitude not preserved", "Absolute amplitude is not preserved")
 has("dispersion is across traces", "across traces, not across runs")
-has("loss ablation present", "light-capacity architecture")
 has("requirements.txt referenced", "requirements.txt")
 has("script count stated", "eighteen scripts")
 has("no stale script count", "seventeen scripts", present=False)
@@ -446,6 +445,158 @@ has("B=32 untested at low ratios", "never tested at those ratios")
 has("no claim B=32 would be better", "no claim about which value would be better")
 has("negative pilot result disclosed", "no variant of the light architecture exceeded")
 has("supersession stated", "supersede it")
+
+print()
+print("J. Section 2.8 loss-function ablation on LARA (re-derived from the released CSVs)")
+LA = pd.read_csv(find("results/loss_ablation_LARA_selection.csv"))
+LR = pd.read_csv(find("results/loss_ablation_LARA_ranking.csv"))
+LCR = [2, 3, 5, 10, 15, 20, 30, 50, 60, 100]
+LSPEC = ["STFT", "STFT_Arrival", "STFT_Phase", "STFT_Wavelet", "STFT_Phase_Arrival"]
+LNC = "NCC_Arrival"
+LMSE = "MSE"
+_l = {(r.Arm, int(r.CR)): r for r in LA.itertuples()}
+L = lambda a, c, m: float(getattr(_l[(a, c)], m))
+TOL = 0.005  # the table rounds to 2 decimals
+
+ck("loss ablation row count", 70, len(LA), 0)
+ck("loss ablation arms", 7, len({r.Arm for r in LA.itertuples()}), 0)
+ck("ratios per arm", 10, LA[LA.Arm == LMSE].shape[0], 0)
+ck("loss ablation is LARA at every ratio", 70,
+   int(sum(1 for r in LA.itertuples()
+           if abs(float(r.Parameter_Count) - float(
+               MAIN[(MAIN.Model == "LARA") & (MAIN.CR == int(r.CR))].Parameter_Count.iloc[0])) < 1)), 0)
+
+# --- every SNR cell printed in Table 4, both panels, parsed from the manuscript
+_tt = BODY[BODY.index(r"\label{tab:loss-ablation}"):]
+_tt = _tt[:_tt.index(r"\end{tabular}")]
+_arm = {a: a.replace("_", chr(92) + "_") for a in [LMSE] + LSPEC + [LNC]}
+_rows = {a: [] for a in _arm}
+for _line in _tt.splitlines():
+    if "\\\\" not in _line:
+        continue
+    if "&" not in _line:
+        continue
+    _first = _line.split("&")[0].strip()
+    for _a, _disp in _arm.items():
+        # exact first-cell match: "STFT" is a prefix of "STFT_Arrival", so a
+        # startswith test would file every spectral row under the plain arm
+        if _first == _disp or _first == _disp + " (control)":
+            _rows[_a].append([float(x) for x in re.findall(r"[0-9]+\.[0-9]+|[0-9]+", _line)])
+ck("Table 4 arms parsed", 7, sum(1 for v in _rows.values() if v), 0)
+for _a, _v in sorted(_rows.items()):
+    ck("Table 4 %s appears once per panel" % _a, 2, len(_v), 0)
+
+# Panel A carries CR 2-15, panel B carries CR 20-100. Check every printed cell.
+for _a in _arm:
+    _pa, _pb = _rows[_a][0], _rows[_a][1]
+    for _i, _c in enumerate([2, 3, 5, 10, 15]):
+        ck("Table 4 %s SNR CR=%d" % (_a, _c), round(L(_a, _c, "SNR"), 2), _pa[_i], TOL)
+    for _i, _c in enumerate([20, 30, 50, 60, 100]):
+        ck("Table 4 %s SNR CR=%d" % (_a, _c), round(L(_a, _c, "SNR"), 2), _pb[_i], TOL)
+
+# --- the seven mean-delta figures, cross-checked two ways
+_rank = {r.Arm: r for r in LR.itertuples()}
+for a in LSPEC + [LNC]:
+    d = sorted(L(a, c, "SNR") - L(LMSE, c, "SNR") for c in LCR)
+    mean = sum(d) / 10
+    med = (d[4] + d[5]) / 2
+    won = sum(1 for c in LCR if L(a, c, "SNR") > L(LMSE, c, "SNR"))
+    ck("Table 4 mean delta %s" % a, round(mean, 3), round(_rank[a].Mean_dSNR_dB, 3), 0)
+    ck("Table 4 median delta %s" % a, round(med, 3), round(_rank[a].Median_dSNR_dB, 3), 0)
+    ck("Table 4 won count %s" % a, _rank[a].CRs_won_vs_MSE, won, 0)
+    ck("Table 4 lost count %s" % a, _rank[a].CRs_lost_vs_MSE, 10 - won, 0)
+    ck("median is negative for %s" % a, True, bool(med < 0))
+
+# --- epoch ranges printed in the last column
+for a in [LMSE] + LSPEC + [LNC]:
+    e = [int(_l[(a, c)].Epochs_Used) for c in LCR]
+    ck("epoch range %s" % a, (min(e), max(e)), (min(e), max(e)), 0)
+
+# --- the five spectral arms: no metric, no ratio
+for a in [x for x in LSPEC if x != "STFT_Wavelet"]:
+    for m in ("SNR", "SSIM", "PSNR", "Correlation"):
+        ck("%s never beats the control on %s" % (a, m), 0,
+           sum(1 for c in LCR if L(a, c, m) > L(LMSE, c, m)), 0)
+    for m in ("MSE", "MAE"):
+        ck("%s never beats the control on %s" % (a, m), 0,
+           sum(1 for c in LCR if L(a, c, m) < L(LMSE, c, m)), 0)
+# STFT_Wavelet is the one documented exception: CR=5 only, on three metrics
+_beats = lambda a, m, c: (L(a, c, m) > L(LMSE, c, m)) if m not in ("MSE", "MAE") \
+    else (L(a, c, m) < L(LMSE, c, m))
+for m in ("SNR", "PSNR", "MAE"):
+    ck("STFT_Wavelet wins %s only at CR=5" % m, [5],
+       [c for c in LCR if _beats("STFT_Wavelet", m, c)], 0)
+for m in ("SSIM", "Correlation"):
+    ck("STFT_Wavelet never wins %s" % m, 0,
+       sum(1 for c in LCR if L("STFT_Wavelet", c, m) > L(LMSE, c, m)), 0)
+ck("STFT_Wavelet is the only spectral arm to win SNR, once", 1,
+   sum(1 for a in LSPEC for c in LCR if L(a, c, "SNR") > L(LMSE, c, "SNR")), 0)
+ck("no spectral arm ever wins correlation", 0,
+   sum(1 for a in LSPEC for c in LCR if L(a, c, "Correlation") > L(LMSE, c, "Correlation")), 0)
+ck("no spectral arm ever wins SSIM", 0,
+   sum(1 for a in LSPEC for c in LCR if L(a, c, "SSIM") > L(LMSE, c, "SSIM")), 0)
+
+ds = sorted(L(a, c, "SNR") - L(LMSE, c, "SNR") for a in LSPEC for c in LCR)
+ck("spectral deficit worst", -11.00, round(ds[0], 2), 0.0)
+ck("spectral deficit least bad", 1.21, round(ds[-1], 2), 0.0)
+ck("spectral deficit mean over fifty comparisons", -3.94, round(sum(ds) / 50, 2), 0.0)
+for c, want in ((2, -7.64), (3, -4.86), (5, -0.85), (30, -5.00), (100, -2.85)):
+    v = sum(L(a, c, "SNR") - L(LMSE, c, "SNR") for a in LSPEC) / 5
+    ck("mean spectral deficit at CR=%d" % c, want, round(v, 2), 0.0)
+
+# --- NCC_Arrival: correlation at every ratio, SNR at three
+ck("NCC_Arrival wins correlation at all ten ratios", 10,
+   sum(1 for c in LCR if L(LNC, c, "Correlation") > L(LMSE, c, "Correlation")), 0)
+ck("NCC_Arrival wins SSIM at eight of ten ratios", 8,
+   sum(1 for c in LCR if L(LNC, c, "SSIM") > L(LMSE, c, "SSIM")), 0)
+ck("NCC_Arrival wins SNR at three of ten ratios", 3,
+   sum(1 for c in LCR if L(LNC, c, "SNR") > L(LMSE, c, "SNR")), 0)
+for c, want in ((10, 0.003), (30, 0.003), (50, 0.065), (100, 0.144)):
+    ck("NCC_Arrival correlation margin at CR=%d" % c, want,
+       round(L(LNC, c, "Correlation") - L(LMSE, c, "Correlation"), 3), 0.0)
+for c, want in ((5, 2.31), (50, 0.18), (100, 0.45)):
+    ck("NCC_Arrival SNR margin at CR=%d" % c, want,
+       round(L(LNC, c, "SNR") - L(LMSE, c, "SNR"), 2), 0.0)
+n9 = [L(LNC, c, "SNR") - L(LMSE, c, "SNR") for c in LCR if c != 5]
+ck("NCC_Arrival mean SNR excluding CR=5", -0.053, round(sum(n9) / 9, 3), 0.0)
+ck("MSE beats NCC on SNR at seven of ten", 7,
+   sum(1 for c in LCR if L(LMSE, c, "SNR") > L(LNC, c, "SNR")), 0)
+ck("MSE beats NCC on MSE at six of ten", 6,
+   sum(1 for c in LCR if L(LMSE, c, "MSE") < L(LNC, c, "MSE")), 0)
+ck("MSE beats NCC on MAE at eight of ten", 8,
+   sum(1 for c in LCR if L(LMSE, c, "MAE") < L(LNC, c, "MAE")), 0)
+
+# --- the CR=5 confound
+ck("control trained shortest at CR=5", True,
+   bool(int(_l[(LMSE, 5)].Epochs_Used) == min(int(_l[(LMSE, c)].Epochs_Used) for c in LCR)))
+ck("control at CR=5 is 3.19 dB below Table 1", -3.19,
+   round(L(LMSE, 5, "SNR") - float(MAIN[(MAIN.Model == "LARA") & (MAIN.CR == 5)].SNR.iloc[0]), 2), 0.0)
+ck("longest-trained arm is worse than the control at CR=100", True,
+   bool(L("STFT_Phase_Arrival", 100, "SNR") < L(LMSE, 100, "SNR")))
+ck("NCC trained fewer epochs than the control at CR=50", True,
+   bool(int(_l[(LNC, 50)].Epochs_Used) < int(_l[(LMSE, 50)].Epochs_Used)))
+
+# --- protocol claims in the prose
+ck("latent exact at every ratio", 10,
+   int(sum(1 for c in LCR if int(_l[(LMSE, c)].Latent_Dim) == 1500 // c)), 0)
+ck("every Actual_CR equals nominal", 70,
+   int(sum(1 for r in LA.itertuples() if abs(float(r.Actual_CR) - float(r.CR)) < 0.01)), 0)
+ck("phase weight scales 0.3 to 0.9", (0.3, 0.9),
+   (round(float(_l[("STFT_Phase", 2)].Lambda_Phase_eff), 1),
+    round(float(_l[("STFT_Phase", 100)].Lambda_Phase_eff), 1)), 0)
+ck("arrival floor scales 1.0 to 3.0", (1.0, 3.0),
+   (round(float(_l[(LNC, 2)].Arrival_Floor_eff), 1),
+    round(float(_l[(LNC, 100)].Arrival_Floor_eff), 1)), 0)
+
+# --- the predecessor study must be gone
+has("no predecessor architecture claim", "light-capacity architecture", present=False)
+has("no 2,000-trace pool claim", "2,000~STEAD traces", present=False)
+has("no 42-run claim", "42 runs", present=False)
+has("loss ablation states seventy models", "Seventy models were trained")
+has("epoch confound disclosed", "matched by budget cap rather than by duration")
+has("CR=5 confound disclosed", "the least reliable point")
+has("nine-ratio figure given", "$-0.053$~dB")
+has("correlation trade-off stated", "would obtain better correlation")
 
 print()
 print("H. Self-consistency")

@@ -1,0 +1,7 @@
+Rank_by_mean_dSNR,Arm,Mean_dSNR_dB,Median_dSNR_dB,Max_dSNR_dB,Min_dSNR_dB,CRs_won_vs_MSE,CRs_lost_vs_MSE,Weighted_dSNR_dB_LEGACY,CRs_with_SNR_regression_total,CRs_with_SNR_regression_highCR,N,Rank_by_legacy_weighted
+1,NCC_Arrival,0.184,-0.05,2.313,-0.452,3,7,0.221,7,0,10,1
+2,STFT_Wavelet,-2.835,-3.163,1.21,-4.852,1,9,-2.983,9,2,10,2
+3,STFT_Arrival,-3.517,-3.505,-0.466,-6.061,0,10,-3.426,10,2,10,3
+4,STFT,-3.985,-4.037,-0.887,-6.483,0,10,-3.827,10,2,10,4
+5,STFT_Phase_Arrival,-4.52,-3.645,-2.099,-10.369,0,10,-4.141,10,2,10,5
+6,STFT_Phase,-4.835,-3.964,-2.033,-10.996,0,10,-4.415,10,2,10,6
