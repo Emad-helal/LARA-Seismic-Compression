@@ -556,6 +556,20 @@ def main():
     # the six "Section 1.1" citations the response letter makes.
     has("encoder carries a run-in label", "\\textbf{Encoder.}")
     has("bottleneck carries a run-in label", "\\textbf{Bottleneck.}")
+    has("residual block and attention carry a run-in label",
+        "\\textbf{Residual Block and Channel Attention.}")
+    has("decoder carries a run-in label", "\\textbf{Decoder.}")
+    # Section 1 keeps one subsection, System Architecture, and marks each
+    # component with an unnumbered run-in label instead.  Promoting them to
+    # numbered subsections was rejected: everything the response letter cites
+    # as "Section 1.1" lives in this text, so splitting it would send a
+    # reviewer looking for the bottleneck to an empty overview.
+    _sm = TEX[:TEX.index(r"\section{Simulation Results}")]
+    ck("System Model keeps a single subsection", 1,
+       len(re.findall(r"\\subsection\{", _sm)))
+    has("no numbered Decoder subsection", "\\subsection{Decoder}", present=False)
+    has("no numbered Training Objective subsection",
+        "\\subsection{Training Objective}", present=False)
 
     print()
     print("F. Self-consistency")
