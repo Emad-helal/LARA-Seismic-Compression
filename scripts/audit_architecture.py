@@ -550,6 +550,12 @@ def main():
         "after the two branches have been added")
     has("bottleneck is described as ending the encoder",
         "The encoder ends with a three-stage bottleneck")
+    # Section 1.1 marks the encoder and the bottleneck with unnumbered run-in
+    # labels, the same \textbf{Label.} form Section 2 uses, so the two blocks are
+    # findable without promoting them to numbered subsections and renumbering
+    # the six "Section 1.1" citations the response letter makes.
+    has("encoder carries a run-in label", "\\textbf{Encoder.}")
+    has("bottleneck carries a run-in label", "\\textbf{Bottleneck.}")
 
     print()
     print("F. Self-consistency")
