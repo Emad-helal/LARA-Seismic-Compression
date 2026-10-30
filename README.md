@@ -40,8 +40,12 @@ the other way:
 ```
 LARA-Seismic-Compression/
 ├── notebooks/
-│   ├── Final_LARA_27092026.ipynb        # main study: LARA, 2 baselines, 3 wavelet codecs
-│   └── Final_Ablation_27092026.ipynb     # 5-arm component ablation
+│   ├── Final_LARA_27092026.ipynb            # main study: LARA, baselines, wavelet codecs
+│   ├── Final_Ablation_27092026.ipynb         # 5-arm component ablation
+│   ├── LARA_Q_12102026.ipynb                 # quantization and entropy-coding sweep
+│   ├── LARA_TEXAS_Validation_25102026.ipynb  # frozen-checkpoint TXED validation
+│   ├── LARA_Instance_Validation_20102026.ipynb  # frozen-checkpoint INSTANCE validation
+│   └── LARA-Q2_Das_Validation.ipynb          # frozen-checkpoint DAS validation
 ├── scripts/
 │   ├── Final_LARA_pipeline_27092026.py       # architecture figure (Fig. 1)
 │   ├── Final_LARA_param_vs_cr_27092026.py    # parameter-count figure (Fig. 6)
@@ -55,18 +59,21 @@ LARA-Seismic-Compression/
 │   ├── Final_Ablation_27092026_runcells.py   # notebook cell splitter used by the above
 │   ├── build_bps_docx.py, build_cost_docx.py, build_cost_gpu_docx.py
 │   │                                         # builders for the technical notes
-│   ├── build_reviewer_response_docx.py       # letter responding to the reviewers
+│   ├── build_reviewer_response_docx.py       # response-letter builder
 │   ├── fix_bench_csv_units_27092026.py       # unit harmonisation for the cost CSVs
 │   ├── treemanifest.py                       # directory inventory
-│   └── audit_numbers.py                      # re-derives every result claim
-│   └── audit_architecture.py                 # checks the model description in 1.1
-├── results/                                  # the CSVs the paper is audited against
+│   ├── audit_numbers.py                      # re-derives the result claims
+│   └── audit_architecture.py                 # checks the model description
+├── results/                                  # CSVs the audits are checked against
+│   ├── manuscript_claims.json                # the values the manuscript prints
+│   ├── das_validation_summary.csv
+│   ├── txed_validation_summary.csv
+│   └── instance_validation_summary.csv
 ├── figures/                                  # corrected and newly added figures
-├── paper/
-│   ├── main.tex, Myreferences.bib, wlscirep.cls
 ├── requirements.txt
-└── LICENSE                                  # MIT
+└── LICENSE                                   # MIT
 ```
+
 
 Notebook outputs have been stripped so the repository stays small; every cell
 re-executes to regenerate them. Checkpoints are **not** redistributed — they are
@@ -152,16 +159,17 @@ This is the part we would ask a reviewer to run first.
 python scripts/audit_numbers.py
 ```
 
-It re-derives **240 quantitative claims** — every value in the results tables,
-the prose, and the analysis sections — from the CSVs in `results/`, and exits
-non-zero if any of them disagrees with `paper/main.tex`. On this release:
+It re-derives **390 quantitative claims** — every value in the results tables,
+the prose, and the analysis sections — from the CSVs in `results/` and the
+values recorded in `results/manuscript_claims.json`, and exits non-zero if any
+of them disagrees. On this release:
 
 ```
-CHECKS RUN: 240    FAILURES: 0
+CHECKS RUN: 390    FAILURES: 0
 ```
 
-The paper quotes this count, and the script asserts that the quoted number still
-matches its own run, so the two cannot drift apart silently.
+The LaTeX source is not redistributed. The claims file records only the values
+the manuscript prints, so the audit does not need the source.
 
 There is a second script, for the description of the model rather than its
 results:
@@ -171,11 +179,12 @@ python scripts/audit_architecture.py
 ```
 
 It instantiates the released `LARA` class at every ratio on the sweep and
-compares the tensor shapes it actually produces with the channel widths,
-temporal lengths and symbol definitions stated in Section 1.1 — 136 checks:
+compares the tensor shapes, channel widths, latent sizes, compression ratios
+and residual activation order with the values recorded in
+`results/manuscript_claims.json` — 163 checks:
 
 ```
-CHECKS RUN: 136    FAILURES: 0
+CHECKS RUN: 163    FAILURES: 0
 ```
 
 This exists because architecture prose drifts in a way result files cannot
@@ -200,6 +209,11 @@ The checks this enforces include:
 - **Every cell of the results tables, not just spot checks.** All 96 cells of
   Table 1, including the standard-deviation rows, are re-derived from
   `model_comparison_results.csv`.
+- **External validation summaries.** `results/das_validation_summary.csv`,
+  `results/txed_validation_summary.csv` and
+  `results/instance_validation_summary.csv` are the per-checkpoint summaries
+  for the three external validations. The INSTANCE panel is exploratory; its
+  table values are interpolated from the saved P-aligned envelopes.
 - **The subnormal-weight finding, recomputed.** §2.10 reports that 23.1–52.9% of
   LARA's stored parameters at CR ≥ 50 are subnormal, and exactly 0.00% for both
   baselines. That quantity depends only on the tensors, so

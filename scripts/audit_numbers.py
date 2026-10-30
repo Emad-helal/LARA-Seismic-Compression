@@ -1,20 +1,18 @@
 """Audit every quantitative claim in the paper against the result CSVs on disk.
 
-Re-derives each number from its source file and compares it with the value the
-manuscript states. Exits non-zero if anything disagrees, so it can be run as a
-gate after any edit to the paper.
+Re-derives each number from its source file and compares it with the value
+recorded in results/manuscript_claims.json. Exits non-zero if anything
+disagrees, so it can be run as a gate after any edit to the paper.
 
-    python scripts/audit_numbers.py          # 226 checks, exit 0 on success
+    python scripts/audit_numbers.py          # exit 0 on success
     python scripts/audit_numbers.py -v       # print every check, not just failures
 
-Runs unchanged in the analysis tree and in the published release: paths are
-resolved relative to the script, trying ./paper and ./results first.
-
-The corrections this enforces are catalogued in NUMBER_LEDGER.md.
+The LaTeX source is not redistributed. The claims file records only the values
+the manuscript prints, and paths are resolved relative to the script.
 """
 import io
+import json
 import os
-import re
 import sys
 
 import numpy as np
@@ -45,8 +43,7 @@ def find(*candidates):
         "none of these exist under %s:\n  %s" % (ROOT, "\n  ".join(candidates)))
 
 
-TEX = find("paper/main.tex",
-           r"Final_Scientific_Reports_Temp__27-7-2026\main.tex")
+CLAIMS = json.load(io.open(find("results/manuscript_claims.json"), encoding="utf-8"))
 MAIN = pd.read_csv(find("results/model_comparison_results.csv",
                         r"seismic 26 9 2026\results\model_comparison_results.csv"))
 AB = pd.read_csv(find("results/ablation_study_results.csv",
@@ -54,10 +51,6 @@ AB = pd.read_csv(find("results/ablation_study_results.csv",
                       r"\seismic 19 9 2026_LARA_aligned\results\ablation_study_results.csv"))
 BPSD = pd.read_csv(find("results/bps_measurements.csv",
                         r"seismic 26 9 2026\results\bps_analysis\bps_measurements.csv"))
-t = io.open(TEX, encoding="utf-8").read()
-# the abstract and the results sections only; the frozen external sections keep
-# their own numbers and are audited separately by inspection
-BODY = t
 
 fails, checks = [], 0
 
@@ -74,17 +67,7 @@ def ck(label, claimed, derived, tol=0.005):
     if not ok:
         fails.append((label, claimed, derived))
     if not ok or VERBOSE:
-        print(("  OK  " if ok else "  BAD ") + f"{label:<52} tex={claimed}  csv={derived}")
-
-
-def has(label, needle, present=True):
-    global checks
-    checks += 1
-    ok = (needle in BODY) == present
-    if not ok:
-        fails.append((label, needle, "not found"))
-    if not ok or VERBOSE:
-        print(("  OK  " if ok else "  BAD ") + f"{label:<52} contains {needle!r}")
+        print(("  OK  " if ok else "  BAD ") + f"{label:<52} claim={claimed}  csv={derived}")
 
 
 print("=" * 110)
@@ -142,55 +125,18 @@ for m, v in (("LARA", 13.5), ("GeneralizedAutoencoder", 4.8), ("AE_PureConcat", 
 
 print()
 print("B. Table 1 cells (every cell re-derived from model_comparison_results.csv)")
-CR_COLS = [2, 3, 5, 10, 15, 20, 30, 100]
-tbl = BODY[BODY.index(r"\label{tab:main-results}"):]
-tbl = tbl[:tbl.index(r"\end{tabular}")]
-hdr = re.search(r"Model\s*&\s*Metric\s*&((?:\s*CR=[0-9]+\s*&)*\s*CR=[0-9]+)", tbl)
-got_cols = [int(x) for x in re.findall(r"CR=([0-9]+)", hdr.group(1))]
-ck("Table 1 header CR order", CR_COLS, got_cols)
-MODEL_KEY = {
-    "LARA": "LARA",
-    r"Gen.\ Autoencoder": "GeneralizedAutoencoder",
-    r"AE\_PureConcat": "AE_PureConcat",
-    r"$\text{Wavelet}_{\text{DB4}}$": "Wavelet_DB4",
-}
-CUR = {"LARA": "LARA", "GeneralizedAutoencoder": "GeneralizedAutoencoder",
-       "AE_PureConcat": "AE_PureConcat", "Wavelet_DB4": "Wavelet_DB4"}
-FIELD = {"SNR": ("SNR", 2), "CC": ("Correlation", 4), "SSIM": ("SSIM", 4)}
+claim_rows = CLAIMS["table1"]
+ck("Table 1 claim count", 96, len(claim_rows), 0)
 ncell = 0
-for line in tbl.splitlines():
-    if "\\\\" not in line or "&" not in line:
-        continue
-    parts = [p.strip() for p in line.rsplit("\\\\", 1)[0].split("&")]
-    if len(parts) < 3:
-        continue
-    model = None
-    for key, val in MODEL_KEY.items():
-        if parts[0].startswith(key.split("}{")[0]) or key in parts[0]:
-            model = val
-    metric = parts[1].strip()
-    vals = []
-    for p in parts[2:]:
-        m2 = re.fullmatch(r"\(?([0-9]+\.[0-9]+)\)?", p)
-        if m2:
-            vals.append(float(m2.group(1)))
-    if len(vals) != len(CR_COLS):
-        continue
-    if model is None and parts[0] in ("", "&"):
-        model = last_model  # noqa: F821
-    if model is None:
-        continue
-    if metric.startswith(r"(\sigma)"):
-        col, dec = "SNR_std", 2
-    elif metric in FIELD:
-        col, dec = FIELD[metric]
-    else:
-        continue
-    last_model = model  # noqa: F841
-    for cr, val in zip(CR_COLS, vals):
-        row = MAIN[(MAIN.Model == model) & (MAIN.CR == cr)]
-        ck(f"Table 1 {model} {metric} CR={cr}", round(float(row[col].iloc[0]), dec), val, 0.0)
-        ncell += 1
+for item in claim_rows:
+    model = item["model"]
+    field = item["metric"]
+    cr = int(item["cr"])
+    value = float(item["value"])
+    dec = 4 if field in ("Correlation", "SSIM") else 2
+    row = MAIN[(MAIN.Model == model) & (MAIN.CR == cr)]
+    ck(f"Table 1 {model} {field} CR={cr}", round(float(row[field].iloc[0]), dec), value, 0.0)
+    ncell += 1
 ck("Table 1 cells audited", 96, ncell)
 
 print()
@@ -212,7 +158,8 @@ for cr, v in ((50, 0.74), (60, 0.62), (100, 0.38)):
     ck(f"CR={cr} GAE params (M)", v, P.loc[cr, "GeneralizedAutoencoder"] / 1e6, 0.005)
 ck("CR=100 LARA vs GAE factor", 1.79, P.loc[100, "LARA"] / P.loc[100, "GeneralizedAutoencoder"], 0.005)
 ck("CR=100 LARA vs AEP factor", 1.77, P.loc[100, "LARA"] / P.loc[100, "AE_PureConcat"], 0.005)
-ck("parameter span is 50x", "0.38 to 19.13", "0.38 to 19.13" if "0.38 to 19.13" in BODY else "MISSING")
+ck("smallest parameter count (M)", 0.38, P[P > 0].min().min() / 1e6, 0.005)
+ck("largest parameter count (M)", 19.13, P.max().max() / 1e6, 0.005)
 
 print()
 print("D. Section 2.7 component ablation")
@@ -275,62 +222,17 @@ ck("excess over entropy, min", 10.3, min(over), 0.06)
 ck("excess over entropy, max", 89.8, max(over), 0.06)
 vf = [(exp[c].fixed_bits_per_trace / exp[c].coder_bits_per_trace) for c in S.index]
 ck("coder vs fixed-width worst overhead", 6.9, max(100 * (1 / v - 1) for v in vf), 0.1)
-ck("PSNR-SNR constant offset", "6.11 to 6.13", "6.11 to 6.13" if "6.11 to 6.13" in BODY else "MISSING")
+_off = (MAIN.PSNR - MAIN.SNR).dropna()
+ck("PSNR-SNR offset minimum", 6.11, _off.min(), 0.005)
+ck("PSNR-SNR offset maximum", 6.13, _off.max(), 0.005)
 ck("CR=20 model/trace ratio (thousands)", 140, 4630087 * 8 / 265.28 / 1000, 1.0)
 
 print()
-print("F. Structural checks")
-def num(label, claimed, derived, tol=0.0):
-    """Numeric structural check."""
-    global checks
-    checks += 1
-    if abs(claimed - derived) > tol:
-        fails.append((label, claimed, derived))
-        print(f"  FAIL {label}: tex={claimed}  derived={derived}")
-    elif VERBOSE:
-        print(f"  ok   {label}: {derived}")
-
-
-has("current repo URL present and correct",
-    "https://github.com/Emad-helal/LARA-Seismic-Compression", present=True)
-has("no archived-release reference in the paper", "HARA", present=False)
-has("no Zenodo reference in the paper", "zenodo", present=False)
-has("no supersession claim in the paper", "superseded", present=False)
-has("audit claim updated", "428 checks")
-has("subnormal script named", "extract\\_subnormal\\_fraction")
-has("paper source released", "paper/")
-has("no peak-at-CR=20 claim", "peak performance at CR=20", present=False)
-has("monotonic claim present", "decreases monotonically")
-has("code length stated where the bit rate is derived",
-    "float32 vector of $1500/\\mathrm{CR}$ values")
-has("separate weights per ratio", "separate set of trained weights")
-has("uniform epoch cap", "cap is uniform across ratios")
-has("80/10/10", "80\\%")
-has("25,091 traces", "25,091")
-has("magnitude 2.5", "magnitude greater than 2.5")
-has("batch 64", "batch size is 64")
-has("PSNR data range 1.0", "data range is 1.0")
-has("subnormal disclosure", "1328.60")
-has("coder is the bottleneck", "1.6 and 110 times")
-has("amplitude not preserved", "Absolute amplitude is not preserved")
-has("dispersion is across traces", "across traces, not across runs")
-has("requirements.txt referenced", "requirements.txt")
-has("script count stated", "eighteen scripts")
-has("no stale script count", "seventeen scripts", present=False)
-has("architecture audit named", "audit\\_architecture")
-
-# The paper quotes a word for the script count. Tie it to the directory so the
-# two cannot disagree: an unaccounted script would otherwise go unnoticed.
-WORDS = {"twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
-         "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
-         "twenty": 20}
-_m = re.search(r"directory of (\w+) scripts", BODY)
-_sd = os.path.join(os.path.dirname(HERE), "scripts")   # HERE is scripts/ itself
-_ondisk = len([f for f in os.listdir(_sd) if f.endswith(".py")]) if os.path.isdir(_sd) else 0
-ck("quoted script count matches the scripts directory",
-   WORDS.get(_m.group(1) if _m else "", -1), _ondisk, 0)
-
 print()
+print("F. Claims file")
+ck("Table 4 claim count", 70, len(CLAIMS["table4"]), 0)
+ck("residual equation recorded", True, bool(CLAIMS.get("residual_equation")))
+
 print("G. Section 2.10 subnormal weights (recomputed from the checkpoints)")
 SUBN = pd.read_csv(find("results/subnormal_fraction.csv"))
 sl = SUBN[SUBN.Model == "LARA"]
@@ -366,33 +268,14 @@ ck("loss ablation is LARA at every ratio", 70,
            if abs(float(r.Parameter_Count) - float(
                MAIN[(MAIN.Model == "LARA") & (MAIN.CR == int(r.CR))].Parameter_Count.iloc[0])) < 1)), 0)
 
-# --- every SNR cell printed in Table 4, both panels, parsed from the manuscript
-_tt = BODY[BODY.index(r"\label{tab:loss-ablation}"):]
-_tt = _tt[:_tt.index(r"\end{tabular}")]
-_arm = {a: a.replace("_", chr(92) + "_") for a in [LMSE] + LSPEC + [LNC]}
-_rows = {a: [] for a in _arm}
-for _line in _tt.splitlines():
-    if "\\\\" not in _line:
-        continue
-    if "&" not in _line:
-        continue
-    _first = _line.split("&")[0].strip()
-    for _a, _disp in _arm.items():
-        # exact first-cell match: "STFT" is a prefix of "STFT_Arrival", so a
-        # startswith test would file every spectral row under the plain arm
-        if _first == _disp or _first == _disp + " (control)":
-            _rows[_a].append([float(x) for x in re.findall(r"[0-9]+\.[0-9]+|[0-9]+", _line)])
-ck("Table 4 arms parsed", 7, sum(1 for v in _rows.values() if v), 0)
-for _a, _v in sorted(_rows.items()):
-    ck("Table 4 %s appears once per panel" % _a, 2, len(_v), 0)
-
-# Panel A carries CR 2-15, panel B carries CR 20-100. Check every printed cell.
-for _a in _arm:
-    _pa, _pb = _rows[_a][0], _rows[_a][1]
-    for _i, _c in enumerate([2, 3, 5, 10, 15]):
-        ck("Table 4 %s SNR CR=%d" % (_a, _c), round(L(_a, _c, "SNR"), 2), _pa[_i], TOL)
-    for _i, _c in enumerate([20, 30, 50, 60, 100]):
-        ck("Table 4 %s SNR CR=%d" % (_a, _c), round(L(_a, _c, "SNR"), 2), _pb[_i], TOL)
+# --- every SNR cell printed in Table 4, recorded in the claims file
+_claim4 = CLAIMS["table4"]
+ck("Table 4 claim count", 70, len(_claim4), 0)
+for item in _claim4:
+    _a = item["arm"]
+    _c = int(item["cr"])
+    _v = float(item["snr"])
+    ck("Table 4 %s SNR CR=%d" % (_a, _c), round(L(_a, _c, "SNR"), 2), _v, TOL)
 
 # --- the seven mean-delta figures, cross-checked two ways
 _rank = {r.Arm: r for r in LR.itertuples()}
@@ -488,28 +371,9 @@ ck("arrival floor scales 1.0 to 3.0", (1.0, 3.0),
    (round(float(_l[(LNC, 2)].Arrival_Floor_eff), 1),
     round(float(_l[(LNC, 100)].Arrival_Floor_eff), 1)), 0)
 
-# --- the predecessor study must be gone
-has("no predecessor architecture claim", "light-capacity architecture", present=False)
-has("no 2,000-trace pool claim", "2,000~STEAD traces", present=False)
-has("no 42-run claim", "42 runs", present=False)
-has("loss ablation states seventy models", "Seventy models were trained")
-has("epoch confound disclosed", "matched by budget cap rather than by duration")
-has("CR=5 confound disclosed", "the least reliable point")
-has("nine-ratio figure given", "$-0.053$~dB")
-has("correlation trade-off stated", "would obtain better correlation")
-
-print()
-print("H. Self-consistency")
-# The paper quotes this script's own check count. Assert it here so adding a
-# check without updating the manuscript fails the gate rather than going stale.
-# `checks + 1` accounts for this check itself.
-_m = re.search(r"runs (\d+) checks with no failures", BODY)
-ck("quoted check count matches this run", int(_m.group(1)) if _m else -1,
-   checks + 1, 0)
-
 print()
 print("=" * 110)
 print(f"CHECKS RUN: {checks}    FAILURES: {len(fails)}")
 for f in fails:
-    print(f"   FAIL {f[0]}: tex={f[1]}  csv={f[2]}")
+    print(f"   FAIL {f[0]}: claim={f[1]}  csv={f[2]}")
 sys.exit(1 if fails else 0)

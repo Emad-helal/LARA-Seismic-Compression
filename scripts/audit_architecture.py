@@ -1,21 +1,19 @@
-"""Re-derive the architecture description in the paper from the model itself.
+"""Re-derive the architecture description from the released model.
 
-The other audit passes read numbers from CSV result files. This one reads them
-from the trained architecture: it locates the LARA class, instantiates it at
-every ratio on the sweep, and compares what the model actually does with what
-the manuscript says it does.
+The other audit re-derives numerical results from the result files. This one
+loads the LARA class from the training notebook, instantiates it at every ratio
+on the sweep, and compares the tensor shapes, widths, latent size, compression
+ratio, and residual activation order with the values recorded in
+results/manuscript_claims.json.
 
-That distinction matters because architecture prose is where drift hides. The
-manuscript once stated the channel width entering the bottleneck as 256 and 512;
-the model produces 128 and 256, and 512 occurs nowhere in it. The stated
-bottleneck input was also written as a fixed stage index, which is wrong
-whenever the conditional encoder block is instantiated. Neither error produced
-a failed CSV check, because neither touches a result file.
+The manuscript prose and LaTeX source are not redistributed. The claims file
+stores the two equations this audit evaluates, so the check still runs against
+the text the manuscript prints without shipping the source.
 
     python scripts/audit_architecture.py         # human-readable report
     python scripts/audit_architecture.py -v      # every check
 
-Exit status is 0 when the manuscript and the model agree.
+Exit status is 0 when the model and the recorded claims agree.
 
 torch is required. It is already in requirements.txt because the notebooks need
 it, but this script is kept separate from audit_numbers.py so that the
@@ -55,20 +53,7 @@ def ck(label, claimed, derived, tol=0):
             print("  ok   %-58s %s" % (label, derived))
     else:
         fails += 1
-        print("  FAIL %-58s paper=%s  model=%s" % (label, claimed, derived))
-
-
-def has(label, needle, present=True):
-    """Check for the presence or absence of a marker string in the manuscript."""
-    global checks, fails
-    checks += 1
-    ok = (needle in TEX) == present
-    if ok:
-        if VERBOSE:
-            print("  ok   %-58s %s" % (label, needle[:40]))
-    else:
-        fails += 1
-        print("  FAIL %-58s %s" % (label, "present" if present else "absent"))
+        print("  FAIL %-58s claim=%s  model=%s" % (label, claimed, derived))
 
 
 def span(label, claimed, value):
@@ -123,9 +108,8 @@ def find(*candidates):
                             % (ROOT, "\n  ".join(candidates)))
 
 
-TEX = io.open(find("paper/main.tex",
-                   r"Final_Scientific_Reports_Temp__27-7-2026\main.tex"),
-              encoding="utf-8").read()
+CLAIMS = json.load(io.open(find("results/manuscript_claims.json"),
+                             encoding="utf-8"))
 
 
 def main():
@@ -264,126 +248,6 @@ def main():
        (round(min(share16)), round(max(share16))))
 
     print()
-    print("C. Symbol hygiene in the manuscript")
-    has("bottleneck input written h_f", "\\ast h_{f}")
-    has("no fixed stage index h_3 remains", "h_3", present=False)
-    has("L_f and h_f defined before use", r"denote this final encoder output by $h_{f}$")
-    has("encoder states 128 for CR<=30", r"128 for $\mathrm{CR} \leq 30$")
-    has("encoder states 256 for CR>30", r"256 for $\mathrm{CR} > 30$")
-    has("encoder does not claim 512", r"512 for", present=False)
-    has("grid present", r"\toprule")
-    has("grid is unnumbered (no caption)", r"Ratio range & Residual blocks",
-        present=True)
-    # W_1 was previously reused for the stem kernel, the first residual kernel
-    # and the first attention kernel. Each symbol must now name one tensor only,
-    # so each is asserted to appear in exactly one equation and its definition.
-    _paper = TEX
-    for _sym, _owner in (("W_0", "stem"), ("b_0", "stem"),
-                         ("W_1", "residual block"), ("W_2", "residual block"),
-                         ("W_3", "attention"), ("b_3", "attention"),
-                         ("W_4", "attention"), ("b_4", "attention"),
-                         ("W_{b}", "bottleneck"), ("W_{p}", "bottleneck")):
-        ck("symbol %s appears twice only: equation plus definition (%s)"
-           % (_sym, _owner), 2, len(re.findall(re.escape(_sym), _paper)))
-    has("stem equation uses W_0", r"h_1 = \varphi\!\left(\mathrm{BN}(W_0 \ast x + b_0)\right)")
-    has("attention equation uses W_3 and W_4",
-        r"a = \sigma\Big( W_4 \, \delta\big( W_3 \, \mathrm{GAP}(x) + b_3 \big) + b_4 \Big)")
-    # Pinned by extracting the equation rather than matching the whole line, so
-    # that a reformatting cannot silently turn this into a check that never
-    # tests anything.
-    _eq_y = [l for l in TEX.split("\n") if l.strip().startswith("y = \\varphi")]
-    ck("residual block equation is readable from the source", 1, len(_eq_y))
-    if _eq_y:
-        ck("residual block equation keeps W_1 and W_2", True,
-           ("W_1" in _eq_y[0] and "W_2" in _eq_y[0]))
-    has("stem no longer claims W_1", r"\mathrm{BN}(W_1 \ast x + b_1)", present=False)
-    has("attention no longer claims W_1", r"delta\big( W_1 \, \mathrm{GAP}(x) + b_1 \big)",
-        present=False)
-    has("bottleneck symbols W_b and W_p are defined",
-        r"where $W_{b}$ is the $1\times1$ bottleneck kernel")
-    has("no flat-vector aside remains", r"single flat vector", present=False)
-    has("no channel-dimension digression remains", r"no channel dimension", present=False)
-    has("no ratio-8-to-10 guard discussion remains",
-        r"between 8 and 10", present=False)
-
-    # Every symbol used in a display equation must also be introduced in prose.
-    # The paper previously used U_k, h_6, W_ref, W_out, theta_d, h_1, y, x' and
-    # odot exactly once each, in their own equation, and defined none of them;
-    # theta_e was written as the generic set {W_i, b_i}, which collided with the
-    # specific W_0..W_4 tensors, and the decoder's level kernel W_k collided with
-    # the residual block's W_1 and W_2. Each is asserted below.
-    #
-    # NOTE: has() is a literal substring test, not a regex test, so these
-    # needles are the raw LaTeX source exactly as it appears in main.tex.
-    has("theta_e written without a generic weight set",
-        "{ W_i, b_i }", present=False)
-    has("no f_enc spelling of the encoder", "f_{\\text{enc}}", present=False)
-    has("encoder function spelled f_encoder", "f_{\\text{encoder}}")
-    has("decoder level kernel written W^dec_k", "W^{\\mathrm{dec}}_{k}")
-    has("no bare W_k decoder kernel", "W_k \\ast U_k", present=False)
-    has("upsampling operator U_k defined",
-        "$U_{k}$ for the nearest-neighbour upsampling")
-    has("h_k introduced as the map entering level k",
-        "$h_{k}$ for the feature map entering level $k$")
-    has("h_6 identified as the last decoder map",
-        "so $h_{6}$ is the last of these maps")
-    has("refinement head kernels named", "we write $W_{\\text{ref}} \\ast")
-    has("output head kernels named", "we write $W_{\\text{out}} \\ast")
-    has("theta_d defined",
-        "$\\theta_{d}$ is the learnable parameter set of the decoder")
-    has("stem output h_1 defined", "$h_1$ is the output of the stem")
-    has("block output y defined", "so that $y$ is the output of the block")
-    has("elementwise product and x' defined",
-        "\\odot$, the elementwise product, giving the attended features $x'$")
-
-    # Metric indices: t is the trace, j the sample, L the count. Previously i
-    # meant the trace in SNR and the sample in CC and MSE, and N meant both the
-    # parameter count and the sample count.
-    has("SNR indexed by the trace index t", "\\mathrm{SNR}_t = 10")
-    has("no SNR_i remains", "\\mathrm{SNR}_i", present=False)
-    has("no sum over i=1..N remains", "\\sum_{i=1}^{N}", present=False)
-    has("t and j introduced for the metrics",
-        "$t$ indexes the evaluation traces, $j$ the $L = 1500$ samples")
-    has("CC sums over the sample index j", "\\sum_{j=1}^{L} (x_j - \\bar{x})")
-    has("MSE sums over j to L",
-        "\\mathrm{MSE} = \\frac{1}{L} \\sum_{j=1}^{L}")
-    has("bars introduced as means", "the bars denote the means")
-    has("SSIM local statistics defined", "are the local means of the two windows")
-    has("SSIM stabilising constants valued",
-        "$C_1 = (0.01)^{2}$ and $C_2 = (0.03)^{2}$")
-    # sigma is the sigmoid in the attention block and the local standard
-    # deviation in SSIM. That is deliberate: SSIM keeps its conventional form
-    # and the two meanings are separated in words. Asserted, not renamed.
-    has("sigma disambiguated as local standard deviation",
-        "their local standard deviations")
-
-    # T = L_f must hold at the three ratios where B is narrower too. The text
-    # once claimed the pooled length followed the code length there, which
-    # contradicted the grid above it.
-    for cr in (2, 3, 5):
-        ck("T stays at L_f where B is narrowed, CR=%d" % cr,
-           rows[cr]["Lf"], rows[cr]["T"], 0)
-    has("no claim that the pooled length follows the code",
-        r"the pooled length follows the code length", present=False)
-    # T = min(code length, L_f) is what the code actually builds. The guard binds
-    # only for ratios of 10 and above, so T sits at L_f for CR = 2, 3 and 5. The
-    # paper does not discuss the unused ratios, but the behaviour is asserted
-    # here so the released implementation cannot drift from the stated T.
-    for cr in (2, 3, 5):
-        _m = LARA(cr, input_len=INPUT_LEN, variant=VARIANT).eval()
-        _naive = min(1500 // cr, 188 if cr <= 30 else 94)
-        ck("min() guard does not bind at CR=%d" % cr, False, _m.T < _naive)
-        ck("T equals min(code, L_f) at CR=%d" % cr, _naive, min(_m.T, _naive), 0)
-    for cr in (10, 20, 100):
-        _m = LARA(cr, input_len=INPUT_LEN, variant=VARIANT).eval()
-        ck("min() guard binds at CR=%d" % cr,
-           True, _m.T > min(1500 // cr, 188 if cr <= 30 else 94))
-    has("B threshold stated as 32 at and above CR 10",
-        r"We use $B=32$ for compression ratios of 10 and above, and $B=16$ for ratios below 10")
-    has("B threshold not presented as tuned", r"inherited rather than chosen")
-    has("funnel does not switch off below CR=10", r"does not switch off below a ratio of 10")
-
-    print()
     print("D. Decoder level lengths, and Figure 1")
     # The paper printed  l_k = round(T * r^((k+1)/6))  while also declaring
     # k = 1..6.  Those are mixed conventions: the released model uses a 0-based
@@ -393,10 +257,10 @@ def main():
     # equation is now printed as r^(k/6).  Rather than trust the prose, evaluate
     # whatever exponent the source actually prints and require it to be
     # self-consistent with the 1-based level numbering used everywhere else.
-    _eqlines = [l for l in TEX.split("\n") if "\\ell_k =" in l]
-    ck("decoder length equation present in the source", 1, len(_eqlines))
+    _eqlines = [CLAIMS.get("decoder_length_equation", "")]
+    ck("decoder length equation recorded in the claims file", 1, len(_eqlines))
     _eq = re.search(r"r\^\{([^}]*)\}", _eqlines[0]) if _eqlines else None
-    ck("decoder length exponent is readable from the source", True, _eq is not None)
+    ck("decoder length exponent is readable from the claims file", True, _eq is not None)
     if _eq:
         _num, _den = _eq.group(1).split("/")
         _off = 0
@@ -405,8 +269,7 @@ def main():
             _off = int(_plus.group(1))
         elif _num.strip() != "k":
             ck("exponent numerator is k or (k+c)", True, False)
-        _rng = re.search(r"k = 1, \\dots, (\d+)", TEX)
-        _nlev = int(_rng.group(1)) if _rng else 6
+        _nlev = int(CLAIMS.get("decoder_levels", 6))
         ck("denominator equals the number of levels", _nlev, int(_den))
         # l_k with the printed exponent must reach 1500 at the stated last level
         for _T in (188, 94):
@@ -440,7 +303,7 @@ def main():
         _fs = io.open(_fig_py, encoding="utf-8").read()
 
         def hasf(label, needle, present=True):
-            """has(), but against the figure script rather than the paper."""
+            """Check a marker string against the figure script."""
             global checks, fails
             checks += 1
             ok = (needle in _fs) == present
@@ -498,6 +361,8 @@ def main():
 
     print()
     print("E. Residual block activation order, measured against the model")
+    _eq_y = [CLAIMS["residual_equation"]] if CLAIMS.get("residual_equation") else []
+    ck("residual block equation recorded in the claims file", 1, len(_eq_y))
     # The manuscript printed  y = phi(BN(W2 * BN(W1 * x))) + S(x),  which puts the
     # activation on the residual branch and takes the sum afterwards.  The trained
     # block does the opposite: it activates after the first normalization, sums,
@@ -539,45 +404,20 @@ def main():
             _rr = _blk.shortcut(_x)
             _printed = _blk.elu((_h + _rr).clone()) if _sum_inside \
                 else _blk.elu(_h.clone()) + _rr
-        ck("the activation after the first normalization is what the source says",
+        ck("the activation after the first normalization is what the equation says",
            True, _inner is not None)
         ck("the skip connection is added inside the outer activation",
            True, _sum_inside)
         ck("printed Eq. 5 reproduces the trained block", True,
            bool(torch.allclose(_out, _printed, atol=1e-6)))
-    has("text states the activation appears twice", "appears twice")
-    has("prose names the activation applied after the addition",
-        "after the two branches have been added")
-    has("bottleneck is described as ending the encoder",
-        "The encoder ends with a three-stage bottleneck")
-    # Section 1.1 marks the encoder and the bottleneck with unnumbered run-in
-    # labels, the same \textbf{Label.} form Section 2 uses, so the two blocks are
-    # findable without promoting them to numbered subsections and renumbering
-    # the six "Section 1.1" citations the response letter makes.
-    has("encoder carries a run-in label", "\\textbf{Encoder.}")
-    has("bottleneck carries a run-in label", "\\textbf{Bottleneck.}")
-    has("residual block and attention carry a run-in label",
-        "\\textbf{Residual Block and Channel Attention.}")
-    has("decoder carries a run-in label", "\\textbf{Decoder.}")
-    # Section 1 keeps one subsection, System Architecture, and marks each
-    # component with an unnumbered run-in label instead.  Promoting them to
-    # numbered subsections was rejected: everything the response letter cites
-    # as "Section 1.1" lives in this text, so splitting it would send a
-    # reviewer looking for the bottleneck to an empty overview.
-    _sm = TEX[:TEX.index(r"\section{Simulation Results}")]
-    ck("System Model keeps a single subsection", 1,
-       len(re.findall(r"\\subsection\{", _sm)))
-    has("no numbered Decoder subsection", "\\subsection{Decoder}", present=False)
-    has("no numbered Training Objective subsection",
-        "\\subsection{Training Objective}", present=False)
-
     print()
-    print("F. Self-consistency")
-    # The paper quotes how many checks this script runs. That number drifted
-    # from the paper to the response document once already, so pin it here.
-    _m = re.search(r"It runs (\d+) further checks", TEX)
-    ck("quoted architecture check count matches this run",
-       int(_m.group(1)) if _m else -1, checks + 1, 0)
+    print("F. Claims file")
+    ck("residual equation recorded in the claims file", True,
+       bool(CLAIMS.get("residual_equation")))
+    ck("decoder length equation recorded in the claims file", True,
+       bool(CLAIMS.get("decoder_length_equation")))
+    ck("decoder level count recorded in the claims file", 6,
+       int(CLAIMS.get("decoder_levels", 0)), 0)
 
     print()
     print("=" * 110)

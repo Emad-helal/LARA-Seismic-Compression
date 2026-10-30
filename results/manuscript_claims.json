@@ -1,0 +1,937 @@
+{
+  "source": "Final manuscript, 30 October 2026",
+  "note": "Machine-readable values checked by scripts/audit_numbers.py and scripts/audit_architecture.py. The LaTeX source is not redistributed.",
+  "table1": [
+    {
+      "model": "LARA",
+      "metric": "SNR",
+      "cr": 2,
+      "value": 39.66
+    },
+    {
+      "model": "LARA",
+      "metric": "SNR",
+      "cr": 3,
+      "value": 36.44
+    },
+    {
+      "model": "LARA",
+      "metric": "SNR",
+      "cr": 5,
+      "value": 31.17
+    },
+    {
+      "model": "LARA",
+      "metric": "SNR",
+      "cr": 10,
+      "value": 23.26
+    },
+    {
+      "model": "LARA",
+      "metric": "SNR",
+      "cr": 15,
+      "value": 20.6
+    },
+    {
+      "model": "LARA",
+      "metric": "SNR",
+      "cr": 20,
+      "value": 19.28
+    },
+    {
+      "model": "LARA",
+      "metric": "SNR",
+      "cr": 30,
+      "value": 18.11
+    },
+    {
+      "model": "LARA",
+      "metric": "SNR",
+      "cr": 100,
+      "value": 16.16
+    },
+    {
+      "model": "LARA",
+      "metric": "Correlation",
+      "cr": 2,
+      "value": 0.9951
+    },
+    {
+      "model": "LARA",
+      "metric": "Correlation",
+      "cr": 3,
+      "value": 0.9871
+    },
+    {
+      "model": "LARA",
+      "metric": "Correlation",
+      "cr": 5,
+      "value": 0.9589
+    },
+    {
+      "model": "LARA",
+      "metric": "Correlation",
+      "cr": 10,
+      "value": 0.8672
+    },
+    {
+      "model": "LARA",
+      "metric": "Correlation",
+      "cr": 15,
+      "value": 0.7897
+    },
+    {
+      "model": "LARA",
+      "metric": "Correlation",
+      "cr": 20,
+      "value": 0.7272
+    },
+    {
+      "model": "LARA",
+      "metric": "Correlation",
+      "cr": 30,
+      "value": 0.642
+    },
+    {
+      "model": "LARA",
+      "metric": "Correlation",
+      "cr": 100,
+      "value": 0.3804
+    },
+    {
+      "model": "LARA",
+      "metric": "SSIM",
+      "cr": 2,
+      "value": 0.9888
+    },
+    {
+      "model": "LARA",
+      "metric": "SSIM",
+      "cr": 3,
+      "value": 0.974
+    },
+    {
+      "model": "LARA",
+      "metric": "SSIM",
+      "cr": 5,
+      "value": 0.9358
+    },
+    {
+      "model": "LARA",
+      "metric": "SSIM",
+      "cr": 10,
+      "value": 0.8214
+    },
+    {
+      "model": "LARA",
+      "metric": "SSIM",
+      "cr": 15,
+      "value": 0.7605
+    },
+    {
+      "model": "LARA",
+      "metric": "SSIM",
+      "cr": 20,
+      "value": 0.7263
+    },
+    {
+      "model": "LARA",
+      "metric": "SSIM",
+      "cr": 30,
+      "value": 0.6929
+    },
+    {
+      "model": "LARA",
+      "metric": "SSIM",
+      "cr": 100,
+      "value": 0.6638
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SNR",
+      "cr": 2,
+      "value": 38.15
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SNR",
+      "cr": 3,
+      "value": 33.92
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SNR",
+      "cr": 5,
+      "value": 29.47
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SNR",
+      "cr": 10,
+      "value": 22.74
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SNR",
+      "cr": 15,
+      "value": 20.2
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SNR",
+      "cr": 20,
+      "value": 18.94
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SNR",
+      "cr": 30,
+      "value": 17.61
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SNR",
+      "cr": 100,
+      "value": 15.87
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "Correlation",
+      "cr": 2,
+      "value": 0.9939
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "Correlation",
+      "cr": 3,
+      "value": 0.9818
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "Correlation",
+      "cr": 5,
+      "value": 0.9522
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "Correlation",
+      "cr": 10,
+      "value": 0.8497
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "Correlation",
+      "cr": 15,
+      "value": 0.7613
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "Correlation",
+      "cr": 20,
+      "value": 0.69
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "Correlation",
+      "cr": 30,
+      "value": 0.5724
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "Correlation",
+      "cr": 100,
+      "value": 0.3148
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SSIM",
+      "cr": 2,
+      "value": 0.9843
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SSIM",
+      "cr": 3,
+      "value": 0.9647
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SSIM",
+      "cr": 5,
+      "value": 0.9274
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SSIM",
+      "cr": 10,
+      "value": 0.8062
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SSIM",
+      "cr": 15,
+      "value": 0.7508
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SSIM",
+      "cr": 20,
+      "value": 0.7163
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SSIM",
+      "cr": 30,
+      "value": 0.6879
+    },
+    {
+      "model": "GeneralizedAutoencoder",
+      "metric": "SSIM",
+      "cr": 100,
+      "value": 0.6481
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SNR",
+      "cr": 2,
+      "value": 34.99
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SNR",
+      "cr": 3,
+      "value": 32.42
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SNR",
+      "cr": 5,
+      "value": 22.65
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SNR",
+      "cr": 10,
+      "value": 22.66
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SNR",
+      "cr": 15,
+      "value": 20.06
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SNR",
+      "cr": 20,
+      "value": 16.95
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SNR",
+      "cr": 30,
+      "value": 17.57
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SNR",
+      "cr": 100,
+      "value": 15.71
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "Correlation",
+      "cr": 2,
+      "value": 0.9917
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "Correlation",
+      "cr": 3,
+      "value": 0.9797
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "Correlation",
+      "cr": 5,
+      "value": 0.8277
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "Correlation",
+      "cr": 10,
+      "value": 0.8272
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "Correlation",
+      "cr": 15,
+      "value": 0.7355
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "Correlation",
+      "cr": 20,
+      "value": 0.5012
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "Correlation",
+      "cr": 30,
+      "value": 0.57
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "Correlation",
+      "cr": 100,
+      "value": 0.2975
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SSIM",
+      "cr": 2,
+      "value": 0.968
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SSIM",
+      "cr": 3,
+      "value": 0.9498
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SSIM",
+      "cr": 5,
+      "value": 0.8094
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SSIM",
+      "cr": 10,
+      "value": 0.8116
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SSIM",
+      "cr": 15,
+      "value": 0.7533
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SSIM",
+      "cr": 20,
+      "value": 0.6686
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SSIM",
+      "cr": 30,
+      "value": 0.69
+    },
+    {
+      "model": "AE_PureConcat",
+      "metric": "SSIM",
+      "cr": 100,
+      "value": 0.636
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SNR",
+      "cr": 2,
+      "value": 60.02
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SNR",
+      "cr": 3,
+      "value": 45.67
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SNR",
+      "cr": 5,
+      "value": 35.97
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SNR",
+      "cr": 10,
+      "value": 27.41
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SNR",
+      "cr": 15,
+      "value": 23.96
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SNR",
+      "cr": 20,
+      "value": 21.92
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SNR",
+      "cr": 30,
+      "value": 19.36
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SNR",
+      "cr": 100,
+      "value": 3.05
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "Correlation",
+      "cr": 2,
+      "value": 0.9998
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "Correlation",
+      "cr": 3,
+      "value": 0.998
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "Correlation",
+      "cr": 5,
+      "value": 0.9899
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "Correlation",
+      "cr": 10,
+      "value": 0.9554
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "Correlation",
+      "cr": 15,
+      "value": 0.9128
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "Correlation",
+      "cr": 20,
+      "value": 0.8661
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "Correlation",
+      "cr": 30,
+      "value": 0.7612
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "Correlation",
+      "cr": 100,
+      "value": 0.0482
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SSIM",
+      "cr": 2,
+      "value": 0.9983
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SSIM",
+      "cr": 3,
+      "value": 0.9921
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SSIM",
+      "cr": 5,
+      "value": 0.9691
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SSIM",
+      "cr": 10,
+      "value": 0.8925
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SSIM",
+      "cr": 15,
+      "value": 0.8293
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SSIM",
+      "cr": 20,
+      "value": 0.7816
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SSIM",
+      "cr": 30,
+      "value": 0.7161
+    },
+    {
+      "model": "Wavelet_DB4",
+      "metric": "SSIM",
+      "cr": 100,
+      "value": 0.2652
+    }
+  ],
+  "table4": [
+    {
+      "arm": "MSE",
+      "cr": 2,
+      "snr": 39.9
+    },
+    {
+      "arm": "MSE",
+      "cr": 3,
+      "snr": 35.95
+    },
+    {
+      "arm": "MSE",
+      "cr": 5,
+      "snr": 27.97
+    },
+    {
+      "arm": "MSE",
+      "cr": 10,
+      "snr": 23.43
+    },
+    {
+      "arm": "MSE",
+      "cr": 15,
+      "snr": 20.65
+    },
+    {
+      "arm": "MSE",
+      "cr": 20,
+      "snr": 19.37
+    },
+    {
+      "arm": "MSE",
+      "cr": 30,
+      "snr": 18.11
+    },
+    {
+      "arm": "MSE",
+      "cr": 50,
+      "snr": 16.82
+    },
+    {
+      "arm": "MSE",
+      "cr": 60,
+      "snr": 16.61
+    },
+    {
+      "arm": "MSE",
+      "cr": 100,
+      "snr": 15.93
+    },
+    {
+      "arm": "STFT",
+      "cr": 2,
+      "snr": 33.42
+    },
+    {
+      "arm": "STFT",
+      "cr": 3,
+      "snr": 31.92
+    },
+    {
+      "arm": "STFT",
+      "cr": 5,
+      "snr": 27.09
+    },
+    {
+      "arm": "STFT",
+      "cr": 10,
+      "snr": 19.4
+    },
+    {
+      "arm": "STFT",
+      "cr": 15,
+      "snr": 16.57
+    },
+    {
+      "arm": "STFT",
+      "cr": 20,
+      "snr": 14.72
+    },
+    {
+      "arm": "STFT",
+      "cr": 30,
+      "snr": 12.9
+    },
+    {
+      "arm": "STFT",
+      "cr": 50,
+      "snr": 12.97
+    },
+    {
+      "arm": "STFT",
+      "cr": 60,
+      "snr": 13.0
+    },
+    {
+      "arm": "STFT",
+      "cr": 100,
+      "snr": 12.92
+    },
+    {
+      "arm": "STFT_Arrival",
+      "cr": 2,
+      "snr": 33.84
+    },
+    {
+      "arm": "STFT_Arrival",
+      "cr": 3,
+      "snr": 32.24
+    },
+    {
+      "arm": "STFT_Arrival",
+      "cr": 5,
+      "snr": 27.51
+    },
+    {
+      "arm": "STFT_Arrival",
+      "cr": 10,
+      "snr": 20.16
+    },
+    {
+      "arm": "STFT_Arrival",
+      "cr": 15,
+      "snr": 17.23
+    },
+    {
+      "arm": "STFT_Arrival",
+      "cr": 20,
+      "snr": 15.75
+    },
+    {
+      "arm": "STFT_Arrival",
+      "cr": 30,
+      "snr": 13.32
+    },
+    {
+      "arm": "STFT_Arrival",
+      "cr": 50,
+      "snr": 13.25
+    },
+    {
+      "arm": "STFT_Arrival",
+      "cr": 60,
+      "snr": 13.17
+    },
+    {
+      "arm": "STFT_Arrival",
+      "cr": 100,
+      "snr": 13.1
+    },
+    {
+      "arm": "STFT_Phase",
+      "cr": 2,
+      "snr": 28.91
+    },
+    {
+      "arm": "STFT_Phase",
+      "cr": 3,
+      "snr": 28.26
+    },
+    {
+      "arm": "STFT_Phase",
+      "cr": 5,
+      "snr": 25.94
+    },
+    {
+      "arm": "STFT_Phase",
+      "cr": 10,
+      "snr": 19.48
+    },
+    {
+      "arm": "STFT_Phase",
+      "cr": 15,
+      "snr": 16.68
+    },
+    {
+      "arm": "STFT_Phase",
+      "cr": 20,
+      "snr": 15.17
+    },
+    {
+      "arm": "STFT_Phase",
+      "cr": 30,
+      "snr": 12.95
+    },
+    {
+      "arm": "STFT_Phase",
+      "cr": 50,
+      "snr": 13.0
+    },
+    {
+      "arm": "STFT_Phase",
+      "cr": 60,
+      "snr": 12.99
+    },
+    {
+      "arm": "STFT_Phase",
+      "cr": 100,
+      "snr": 13.02
+    },
+    {
+      "arm": "STFT_Wavelet",
+      "cr": 2,
+      "snr": 35.59
+    },
+    {
+      "arm": "STFT_Wavelet",
+      "cr": 3,
+      "snr": 34.17
+    },
+    {
+      "arm": "STFT_Wavelet",
+      "cr": 5,
+      "snr": 29.18
+    },
+    {
+      "arm": "STFT_Wavelet",
+      "cr": 10,
+      "snr": 21.25
+    },
+    {
+      "arm": "STFT_Wavelet",
+      "cr": 15,
+      "snr": 17.91
+    },
+    {
+      "arm": "STFT_Wavelet",
+      "cr": 20,
+      "snr": 15.89
+    },
+    {
+      "arm": "STFT_Wavelet",
+      "cr": 30,
+      "snr": 13.25
+    },
+    {
+      "arm": "STFT_Wavelet",
+      "cr": 50,
+      "snr": 12.97
+    },
+    {
+      "arm": "STFT_Wavelet",
+      "cr": 60,
+      "snr": 13.09
+    },
+    {
+      "arm": "STFT_Wavelet",
+      "cr": 100,
+      "snr": 13.08
+    },
+    {
+      "arm": "STFT_Phase_Arrival",
+      "cr": 2,
+      "snr": 29.53
+    },
+    {
+      "arm": "STFT_Phase_Arrival",
+      "cr": 3,
+      "snr": 28.87
+    },
+    {
+      "arm": "STFT_Phase_Arrival",
+      "cr": 5,
+      "snr": 25.87
+    },
+    {
+      "arm": "STFT_Phase_Arrival",
+      "cr": 10,
+      "snr": 19.87
+    },
+    {
+      "arm": "STFT_Phase_Arrival",
+      "cr": 15,
+      "snr": 16.92
+    },
+    {
+      "arm": "STFT_Phase_Arrival",
+      "cr": 20,
+      "snr": 15.83
+    },
+    {
+      "arm": "STFT_Phase_Arrival",
+      "cr": 30,
+      "snr": 13.1
+    },
+    {
+      "arm": "STFT_Phase_Arrival",
+      "cr": 50,
+      "snr": 13.09
+    },
+    {
+      "arm": "STFT_Phase_Arrival",
+      "cr": 60,
+      "snr": 13.19
+    },
+    {
+      "arm": "STFT_Phase_Arrival",
+      "cr": 100,
+      "snr": 13.27
+    },
+    {
+      "arm": "NCC_Arrival",
+      "cr": 2,
+      "snr": 39.45
+    },
+    {
+      "arm": "NCC_Arrival",
+      "cr": 3,
+      "snr": 35.73
+    },
+    {
+      "arm": "NCC_Arrival",
+      "cr": 5,
+      "snr": 30.29
+    },
+    {
+      "arm": "NCC_Arrival",
+      "cr": 10,
+      "snr": 23.34
+    },
+    {
+      "arm": "NCC_Arrival",
+      "cr": 15,
+      "snr": 20.6
+    },
+    {
+      "arm": "NCC_Arrival",
+      "cr": 20,
+      "snr": 19.33
+    },
+    {
+      "arm": "NCC_Arrival",
+      "cr": 30,
+      "snr": 17.91
+    },
+    {
+      "arm": "NCC_Arrival",
+      "cr": 50,
+      "snr": 17.0
+    },
+    {
+      "arm": "NCC_Arrival",
+      "cr": 60,
+      "snr": 16.57
+    },
+    {
+      "arm": "NCC_Arrival",
+      "cr": 100,
+      "snr": 16.38
+    }
+  ],
+  "residual_equation": "y = \\varphi\\!\\Big(\\mathrm{BN}\\big(W_2 \\ast \\varphi(\\mathrm{BN}(W_1 \\ast x))\\big) + S(x)\\Big),",
+  "decoder_length_equation": "\\ell_k = \\mathrm{round}\\!\\left(T\\, r^{k/6}\\right), \\qquad k = 1, \\dots, 6,",
+  "decoder_levels": 6
+}
